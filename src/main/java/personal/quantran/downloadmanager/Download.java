@@ -20,8 +20,6 @@ import java.nio.file.Paths;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
 /**
  *
@@ -68,9 +66,14 @@ public class Download {
 
 		// Start threads to download.
 		Instant start = Instant.now();
+		ArrayList<DownloadThread> downloadParts;
 
-		ArrayList<DownloadThread> downloadParts = startDownloadThreads(url,
-			contentSize, mPartsCount);
+		try {
+			downloadParts = startDownloadThreads(url,
+				contentSize, mPartsCount);
+		} catch (RuntimeException ex) {
+			throw ex;
+		}
 
 		// Wait for the threads to finish downloading
 		for (int i = 0; i < downloadParts.size(); i++) {
