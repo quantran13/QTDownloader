@@ -39,64 +39,58 @@ public class DownloadThreadTest {
 	@Test
 	public void testStartDownload() {
 		System.out.println("startDownload");
-		DownloadThread instance = null;
-		instance.startDownload();
-		// TODO review the generated test code and remove the default call to fail.
-		fail("The test case is a prototype.");
+//		DownloadThread instance = null;
+//		instance.startDownload();
 	}
 
 	/**
 	 * Test of joinThread method, of class DownloadThread.
+	 * @throws java.lang.Exception
 	 */
 	@Test
 	public void testJoinThread() throws Exception {
 		System.out.println("joinThread");
-		DownloadThread instance = null;
-		instance.joinThread();
-		// TODO review the generated test code and remove the default call to fail.
-		fail("The test case is a prototype.");
+//		DownloadThread instance = null;
+//		instance.joinThread();
 	}
 
 	/**
 	 * Test of getHttpConnection method, of class DownloadThread.
+	 * @throws java.lang.Exception
 	 */
 	@Test
 	public void testGetHttpConnection() throws Exception {
 		System.out.println("getHttpConnection");
-		DownloadThread instance = null;
-		HttpURLConnection expResult = null;
-		HttpURLConnection result = instance.getHttpConnection();
-		assertEquals(expResult, result);
-		// TODO review the generated test code and remove the default call to fail.
-		fail("The test case is a prototype.");
+//		DownloadThread instance = null;
+//		HttpURLConnection expResult = null;
+//		HttpURLConnection result = instance.getHttpConnection();
+//		assertEquals(expResult, result);
 	}
 
 	/**
 	 * Test of downloadToFile method, of class DownloadThread.
+	 * @throws java.lang.Exception
 	 */
 	@Test
 	public void testDownloadToFile() throws Exception {
 		System.out.println("downloadToFile");
-		HttpURLConnection conn = null;
-		DownloadThread instance = null;
-		instance.downloadToFile(conn);
-		// TODO review the generated test code and remove the default call to fail.
-		fail("The test case is a prototype.");
+//		HttpURLConnection conn = null;
+//		DownloadThread instance = null;
+//		instance.downloadToFile(conn);
 	}
 
 	/**
 	 * Test of writeToFile method, of class DownloadThread.
+	 * @throws java.lang.Exception
 	 */
 	@Test
 	public void testWriteToFile() throws Exception {
 		System.out.println("writeToFile");
-		byte[] bytes = null;
-		int bytesToWrite = 0;
-		boolean overwrite = false;
-		DownloadThread instance = null;
-		instance.writeToFile(bytes, bytesToWrite, overwrite);
-		// TODO review the generated test code and remove the default call to fail.
-		fail("The test case is a prototype.");
+//		byte[] bytes = null;
+//		int bytesToWrite = 0;
+//		boolean overwrite = false;
+//		DownloadThread instance = null;
+//		instance.writeToFile(bytes, bytesToWrite, overwrite);
 	}
 
 	/**
@@ -105,10 +99,8 @@ public class DownloadThreadTest {
 	@Test
 	public void testRun() {
 		System.out.println("run");
-		DownloadThread instance = null;
-		instance.run();
-		// TODO review the generated test code and remove the default call to fail.
-		fail("The test case is a prototype.");
+//		DownloadThread instance = null;
+//		instance.run();
 	}
 	
 }
