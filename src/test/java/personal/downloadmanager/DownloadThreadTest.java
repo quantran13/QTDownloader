@@ -1,6 +1,5 @@
 package personal.downloadmanager;
 
-import personal.downloadmanager.DownloadThread;
 import java.net.HttpURLConnection;
 import org.junit.After;
 import org.junit.AfterClass;
