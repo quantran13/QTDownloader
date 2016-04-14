@@ -113,15 +113,14 @@ public class DownloadThread implements Runnable {
 			
 			mDownloadedSize = 0;
 			
-			// Create byte arrays to save the data to.
-			// The main byte array is of size chunkSize bytes, which is 8KB.
-			
 			/*
 			 * The first method of downloading has the same performance as the
 			 * second one. However I prefer the second one (partly because 
 			 * initially I thought it would be better), so I used the second one.
 			 * Feel free to improve the algorithm, and if you find a faster way
 			 * please let me know :)
+			 *
+			 * Btw, the first method is commented out below.
 			 */
 			 
 			/*
@@ -227,7 +226,7 @@ public class DownloadThread implements Runnable {
 			downloadToFile(conn);
 		} catch (IOException ex) {
 			Logger.getLogger(DownloadThread.class.getName()).log(Level.SEVERE, null, ex);
-			//System.out.println("IO Exception: " + ex.getMessage());
+			throw new RuntimeException("Cannot connect to the given URL!");
 		}
 	}
 
