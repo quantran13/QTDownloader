@@ -27,10 +27,11 @@ public class DownloadThread implements Runnable {
 	private Thread mThread;
 	private long mStartByte;
 	private long mEndByte;
+	private long mPartSize;
 	private int mPart;
 	private URL mUrl;
 	private String mFileName;
-	public long mDownloadedSize;
+	private long mDownloadedSize;
 
 	/**
 	 * Construct a download object with the given URL and byte range to downloads
@@ -38,9 +39,10 @@ public class DownloadThread implements Runnable {
 	 * @param url The URL to download from.
 	 * @param startByte The starting byte.
 	 * @param endByte The end byte.
+	 * @param partSize The size of the part needed to be downloaded.
 	 * @param part The part of the file being downloaded.
 	 */
-	public DownloadThread(URL url, long startByte, long endByte, int part) {
+	public DownloadThread(URL url, long startByte, long endByte, long partSize, int part) {
 		if (startByte >= endByte) {
 			throw new RuntimeException("The start byte cannot be larger than "
 				+ "the end byte!");
@@ -48,6 +50,7 @@ public class DownloadThread implements Runnable {
 
 		mStartByte = startByte;
 		mEndByte = endByte;
+		mPartSize = partSize;
 		mUrl = url;
 		mPart = part;
 		mDownloadedSize = 0;
@@ -214,6 +217,23 @@ public class DownloadThread implements Runnable {
 			// Write the data.
 			outChannel.write(data);
 		}
+	}
+	
+	/**
+	 * Gets the downloaded size.
+	 * 
+	 * @return The downloaded size.
+	 */
+	public long getDownloadedSize() {
+		return mDownloadedSize;
+	}
+	
+	/**
+	 * Gets the size of the current part that needs to be downloaded.
+	 * @return The size of the current part needed to be downloaded.
+	 */
+	public long getPartSize() {
+		return mPartSize;
 	}
 
 	@Override

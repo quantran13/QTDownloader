@@ -11,7 +11,6 @@ import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.net.ConnectException;
 import java.net.HttpURLConnection;
-import java.net.MalformedURLException;
 import java.net.URL;
 import java.nio.channels.FileChannel;
 import java.nio.file.Files;
@@ -25,89 +24,27 @@ import java.util.ArrayList;
  *
  * @author quan
  */
-public class Download {
+public class Download implements Runnable {
 
 	private final String mUrl;
 	private final int mPartsCount;
+	private final Progress mProgress;
+	
+	private final Thread mThread;
 
 	/**
 	 * Constructor for the Download class which takes an URL string as parameter
 	 *
 	 * @param urlString
 	 * @param partsCount
+	 * @param progress
 	 */
-	public Download(String urlString, int partsCount) {
+	public Download(String urlString, int partsCount, Progress progress) {
 		mUrl = urlString;
 		mPartsCount = partsCount;
-	}
-
-	/**
-	 * Start downloading from the given URL.
-	 * 
-	 * @throws IOException If failed to open the output file.
-	 * @throws MalformedURLException If the given URL is invalid.
-	 * @throws InterruptedException If the downloading threads are interrupted.
-	 * @throws ConnectException If failed to connect to the given URL.
-	 */
-	public void start() throws InterruptedException, MalformedURLException, IOException, ConnectException {
-		// Get the file name and create the URL object
-		String fileName = new File(mUrl).getName();
-		URL url = new URL(mUrl);
-
-		// Check the validity of the URL
-		HttpResult result = checkURLValidity(url);
-		long contentSize = result.contentLength;
-		int responseCode = result.responseCode;
-		long partSize = contentSize / mPartsCount;
+		mProgress = progress;
 		
-		if (contentSize == -1 || responseCode != 200)
-			throw new RuntimeException("Server responsed with the error code: "
-			                           + responseCode + ".");
-
-		// Start threads to download.
-		Instant start = Instant.now();
-		ArrayList<DownloadThread> downloadParts;
-
-		try {
-			downloadParts = startDownloadThreads(url,
-				contentSize, mPartsCount);
-		} catch (RuntimeException ex) {
-			throw ex;
-		}
-
-		// Wait for the threads to finish downloading
-		for (int i = 0; i < downloadParts.size(); i++) {
-			downloadParts.get(i).joinThread();
-			if (downloadParts.get(i).mDownloadedSize != partSize) {
-				throw new RuntimeException("Download incompleted at part "
-					+ (i + 1));
-			}
-		}
-
-		// Calculte the time it took to download all mPartsCount
-		Instant stop = Instant.now();
-		double t = (double) ((Duration.between(start, stop).toMillis()));
-		System.out.println("Parts downloaded in: " + t);
-
-		// Join the mPartsCount together
-		joinDownloadedParts(fileName, downloadParts);
-		
-		// Delete part files
-		try {
-			for (int i = 0; i < downloadParts.size(); i++) {
-				String partName = fileName + ".part" + (i+1);
-				Path filePath = Paths.get(partName);
-				Files.deleteIfExists(filePath);
-			}
-		} catch (IOException ex) { 
-			// If failed to delete then just ignore the exception.
-			// What can we do?
-		}
-
-		// Time
-		Instant done = Instant.now();
-		double time = (double) ((Duration.between(stop, done).toMillis()));
-		System.out.println("Parts joined in:: " + time);
+		mThread = new Thread(this, "Main download thread");
 	}
 
 	/**
@@ -162,8 +99,11 @@ public class Download {
 			} else {
 				endByte = (i + 1) * partSize - 1;
 			}
+			
+			long currentPartSize = endByte - beginByte + 1;
 
-			DownloadThread downloadThread = new DownloadThread(url, beginByte, endByte, i + 1);
+			DownloadThread downloadThread = new DownloadThread(url, beginByte, 
+				endByte, currentPartSize, i + 1);
 			downloadThreadsList.add(downloadThread);
 			downloadThreadsList.get(i).startDownload();
 		}
@@ -184,7 +124,7 @@ public class Download {
 			FileChannel mainChannel = mainFile.getChannel();
 			
 			for (int i = 0; i < downloadParts.size(); i++) {
-				long partSize = downloadParts.get(i).mDownloadedSize;
+				long partSize = downloadParts.get(i).getDownloadedSize();
 				String partName = fileName + ".part" + (i + 1);
 				
 				try (RandomAccessFile partFile = new RandomAccessFile(partName, "rw")) {
@@ -192,6 +132,97 @@ public class Download {
 					mainChannel.transferFrom(partFileChannel, i * partSize, partSize);
 				}
 			}
+		}
+	}
+	
+	/**
+	 * Start the thread.
+	 */
+	public void startThread() {
+		mThread.start();
+	}
+	
+	/**
+	 * Join the thread.
+	 * 
+	 * @throws InterruptedException if the thread is interrupted.
+	 */
+	public void joinThread() throws InterruptedException {
+		mThread.join();
+	}
+	
+	/**
+	 * Start downloading from the given URL.
+	 */
+	@Override
+	public void run(){
+		try {
+			// Get the file name and create the URL object
+			String fileName = new File(mUrl).getName();
+			URL url = new URL(mUrl);
+
+			// Check the validity of the URL
+			HttpResult result = checkURLValidity(url);
+			long contentSize = result.contentLength;
+			int responseCode = result.responseCode;
+
+			if (contentSize == -1 || responseCode != 200)
+				throw new RuntimeException("Server responsed with the error code: "
+										   + responseCode + ".");
+
+			// Notify the progress object of the result of the check
+			synchronized(mProgress) {
+				mProgress.mURLVerifyResult.contentLength = contentSize;
+				mProgress.mURLVerifyResult.responseCode = responseCode;
+				mProgress.notifyAll();
+			}
+
+			// Start threads to download.
+			Instant start = Instant.now();
+			ArrayList<DownloadThread> downloadParts;
+
+			try {
+				downloadParts = startDownloadThreads(url, contentSize, mPartsCount);
+			} catch (RuntimeException ex) {
+				throw ex;
+			}
+
+			// Wait for the threads to finish downloading
+			for (int i = 0; i < downloadParts.size(); i++) {
+				DownloadThread currentThread = downloadParts.get(i);
+				currentThread.joinThread();
+				if (currentThread.getDownloadedSize() != currentThread.getPartSize()) {
+					throw new RuntimeException("Download incompleted at part "
+						+ (i + 1));
+				}
+			}
+
+			// Calculte the time it took to download all mPartsCount
+			Instant stop = Instant.now();
+			double t = (double) ((Duration.between(start, stop).toMillis()));
+			System.out.println("Parts downloaded in: " + t);
+
+			// Join the mPartsCount together
+			joinDownloadedParts(fileName, downloadParts);
+
+			// Delete part files
+			try {
+				for (int i = 0; i < downloadParts.size(); i++) {
+					String partName = fileName + ".part" + (i+1);
+					Path filePath = Paths.get(partName);
+					Files.deleteIfExists(filePath);
+				}
+			} catch (IOException ex) { 
+				// If failed to delete then just ignore the exception.
+				// What can we do?
+			}
+
+			// Time
+			Instant done = Instant.now();
+			double time = (double) ((Duration.between(stop, done).toMillis()));
+			System.out.println("Parts joined in:: " + time);
+		} catch (RuntimeException | InterruptedException | IOException ex) {
+			mProgress.ex = ex;
 		}
 	}
 

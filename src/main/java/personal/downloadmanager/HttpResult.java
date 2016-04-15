@@ -8,8 +8,8 @@
 package personal.downloadmanager;
 
 public class HttpResult {
-	public final int responseCode;
-	public final long contentLength;
+	public int responseCode;
+	public long contentLength;
 	
 	/**
 	 *
