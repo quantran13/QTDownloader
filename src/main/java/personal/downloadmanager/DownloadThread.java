@@ -30,8 +30,9 @@ public class DownloadThread implements Runnable {
 	private long mPartSize;
 	private int mPart;
 	private URL mUrl;
-	private String mFileName;
 	private long mDownloadedSize;
+	
+	public final String mFileName;
 
 	/**
 	 * Construct a download object with the given URL and byte range to downloads
@@ -54,7 +55,12 @@ public class DownloadThread implements Runnable {
 		mUrl = url;
 		mPart = part;
 		mDownloadedSize = 0;
+		
+		// Get the file name.
+		mFileName = "." + (new File(mUrl.toExternalForm()).getName() + ".part" 
+			+ mPart);
 
+		// Initialize the thread
 		mThread = new Thread(this, "Part #" + part);
 	}
 
@@ -82,9 +88,6 @@ public class DownloadThread implements Runnable {
 	 * @throws IOException if failed to connect to the given URL.
 	 */
 	public HttpURLConnection getHttpConnection() throws IOException {
-		// Get the file name.
-		mFileName = new File(mUrl.toExternalForm()).getName() + ".part" + mPart;
-
 		// Connect to the URL
 		HttpURLConnection conn = (HttpURLConnection) mUrl.openConnection();
 

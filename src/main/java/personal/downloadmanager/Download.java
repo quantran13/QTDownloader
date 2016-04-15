@@ -178,7 +178,6 @@ public class Download implements Runnable {
 			}
 
 			// Start threads to download.
-			Instant start = Instant.now();
 			ArrayList<DownloadThread> downloadParts;
 
 			try {
@@ -199,8 +198,12 @@ public class Download implements Runnable {
 
 			// Calculte the time it took to download all mPartsCount
 			Instant stop = Instant.now();
-			double t = (double) ((Duration.between(start, stop).toMillis()));
-			System.out.println("Parts downloaded in: " + t);
+			
+			// Notify that all parts have finished downloading
+			synchronized (mProgress) {
+				mProgress.downloadFinish = true;
+				mProgress.notifyAll();
+			}
 
 			// Join the mPartsCount together
 			joinDownloadedParts(fileName, downloadParts);
@@ -217,12 +220,17 @@ public class Download implements Runnable {
 				// What can we do?
 			}
 
-			// Time
-			Instant done = Instant.now();
-			double time = (double) ((Duration.between(stop, done).toMillis()));
-			System.out.println("Parts joined in:: " + time);
+			// Notify that all parts have finished joining.
+			synchronized(mProgress) {
+				mProgress.joinPartsFinish = true;
+				mProgress.notifyAll();
+			}
+			
 		} catch (RuntimeException | InterruptedException | IOException ex) {
-			mProgress.ex = ex;
+			synchronized (mProgress) {
+				mProgress.ex = ex;
+				mProgress.notifyAll();
+			}
 		}
 	}
 
