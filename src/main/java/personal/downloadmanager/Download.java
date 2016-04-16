@@ -16,8 +16,6 @@ import java.nio.channels.FileChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.time.Duration;
-import java.time.Instant;
 import java.util.ArrayList;
 
 /**
@@ -84,10 +82,12 @@ public class Download implements Runnable {
 	 * @param url The URL object containing the download URL.
 	 * @param contentSize The size of the file being downloaded.
 	 * @param partCount The number of download mPartsCount.
+	 * @param progress
 	 * 
 	 * @return An ArrayList of downloading thread objects.
 	 */
-	public ArrayList<DownloadThread> startDownloadThreads(URL url, long contentSize, int partCount) {
+	public ArrayList<DownloadThread> startDownloadThreads(URL url, long contentSize, 
+		                                                  int partCount, Progress progress) {
 		long partSize = contentSize / partCount;
 		ArrayList<DownloadThread> downloadThreadsList = new ArrayList<>(partCount);
 
@@ -103,7 +103,7 @@ public class Download implements Runnable {
 			long currentPartSize = endByte - beginByte + 1;
 
 			DownloadThread downloadThread = new DownloadThread(url, beginByte, 
-				endByte, currentPartSize, i + 1);
+				endByte, currentPartSize, i + 1, progress);
 			downloadThreadsList.add(downloadThread);
 			downloadThreadsList.get(i).startDownload();
 		}
@@ -169,6 +169,7 @@ public class Download implements Runnable {
 			if (contentSize == -1 || responseCode != 200)
 				throw new RuntimeException("Server responsed with the error code: "
 										   + responseCode + ".");
+			
 
 			// Notify the progress object of the result of the check
 			synchronized(mProgress) {
@@ -181,7 +182,8 @@ public class Download implements Runnable {
 			ArrayList<DownloadThread> downloadParts;
 
 			try {
-				downloadParts = startDownloadThreads(url, contentSize, mPartsCount);
+				downloadParts = startDownloadThreads(url, contentSize, 
+					                                 mPartsCount, mProgress);
 			} catch (RuntimeException ex) {
 				throw ex;
 			}
@@ -195,9 +197,6 @@ public class Download implements Runnable {
 						+ (i + 1));
 				}
 			}
-
-			// Calculte the time it took to download all mPartsCount
-			Instant stop = Instant.now();
 			
 			// Notify that all parts have finished downloading
 			synchronized (mProgress) {

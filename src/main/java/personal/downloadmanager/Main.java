@@ -40,7 +40,7 @@ public class Main {
 		// Start new download with the given URL
 		DateFormat dateFormat = new SimpleDateFormat("dd-MM-yyyy HH:mm:ss");
 		Date date = new Date();
-		System.out.println("--- " + dateFormat.format(date) + " ---");
+		System.out.println("--- " + dateFormat.format(date) + " ---\n");
 		System.out.println("Downloading from: " + url);
 	
 		Download newDownload = new Download(url, partsCount, progress);
@@ -66,6 +66,8 @@ public class Main {
 			}
 		}
 		
+		System.out.println();
+		
 		// Wait for the download to finish
 		Instant downloadFinish = null;
 		
@@ -78,7 +80,7 @@ public class Main {
 				double downloadTime = ((double) (Duration.between(start, 
 					downloadFinish).toMillis())) / 1000;
 				
-				System.out.println("\nTotal download time: " + downloadTime);
+				System.out.println("\n\nTotal download time: " + downloadTime);
 			} else {
 				printErrorMessage(progress.ex);
 			}

@@ -33,6 +33,8 @@ public class DownloadThread implements Runnable {
 	private long mDownloadedSize;
 	
 	public final String mFileName;
+	
+	private final Progress mProgress;
 
 	/**
 	 * Construct a download object with the given URL and byte range to downloads
@@ -42,8 +44,10 @@ public class DownloadThread implements Runnable {
 	 * @param endByte The end byte.
 	 * @param partSize The size of the part needed to be downloaded.
 	 * @param part The part of the file being downloaded.
+	 * @param progress
 	 */
-	public DownloadThread(URL url, long startByte, long endByte, long partSize, int part) {
+	public DownloadThread(URL url, long startByte, long endByte, long partSize, 
+	                      int part, Progress progress) {
 		if (startByte >= endByte) {
 			throw new RuntimeException("The start byte cannot be larger than "
 				+ "the end byte!");
@@ -62,6 +66,8 @@ public class DownloadThread implements Runnable {
 
 		// Initialize the thread
 		mThread = new Thread(this, "Part #" + part);
+		
+		mProgress = progress;
 	}
 
 	/**
@@ -173,6 +179,7 @@ public class DownloadThread implements Runnable {
 				writeToFile(subArray, subArraySize, overwrite);
 			*/
 
+			
 			// Read a chunk of given size at time and write the actual amount
 			// of bytes read to the output file.
 			byte[] dataArray = new byte[chunkSize];
@@ -193,11 +200,18 @@ public class DownloadThread implements Runnable {
 				mDownloadedSize += result;
 				writeToFile(dataArray, result, overwrite);
 				overwrite = false;
+				
+				synchronized(mProgress) {
+					mProgress.downloadedCount += result;
+					mProgress.updateProgressBar();
+					mProgress.notifyAll();
+				}
 			}
+			
 
 			// Write info
 			// TODO Remove comment
-			System.out.println(mThread.getName() + " - downloaded size: " + mDownloadedSize);
+			//System.out.println(mThread.getName() + " - downloaded size: " + mDownloadedSize);
 		}
 	}
 
