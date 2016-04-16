@@ -100,7 +100,7 @@ public class DownloadThread implements Runnable {
 		String downloadRange = "bytes=" + mStartByte + "-" + mEndByte;
 		conn.setRequestProperty("Range", downloadRange);
 		conn.connect();
-
+		
 		// Return the connection.
 		return conn;
 	}

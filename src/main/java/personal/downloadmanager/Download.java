@@ -122,14 +122,18 @@ public class Download implements Runnable {
 	public void joinDownloadedParts(String fileName, ArrayList<DownloadThread> downloadParts) throws IOException {
 		try (RandomAccessFile mainFile = new RandomAccessFile(fileName, "rw")) {
 			FileChannel mainChannel = mainFile.getChannel();
+			long startPosition = 0;
 			
 			for (int i = 0; i < downloadParts.size(); i++) {
-				long partSize = downloadParts.get(i).getDownloadedSize();
 				String partName = "." + fileName + ".part" + (i + 1);
 				
 				try (RandomAccessFile partFile = new RandomAccessFile(partName, "rw")) {
+					long partSize = downloadParts.get(i).getDownloadedSize();
 					FileChannel partFileChannel = partFile.getChannel();
-					mainChannel.transferFrom(partFileChannel, i * partSize, partSize);
+					long transferedBytes = mainChannel.transferFrom(partFileChannel,
+						startPosition, partSize);
+					
+					startPosition += transferedBytes;
 				}
 			}
 		}
