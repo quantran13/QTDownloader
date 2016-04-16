@@ -207,11 +207,6 @@ public class DownloadThread implements Runnable {
 					mProgress.notifyAll();
 				}
 			}
-			
-
-			// Write info
-			// TODO Remove comment
-			//System.out.println(mThread.getName() + " - downloaded size: " + mDownloadedSize);
 		}
 	}
 

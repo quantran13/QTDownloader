@@ -125,7 +125,7 @@ public class Download implements Runnable {
 			
 			for (int i = 0; i < downloadParts.size(); i++) {
 				long partSize = downloadParts.get(i).getDownloadedSize();
-				String partName = fileName + ".part" + (i + 1);
+				String partName = "." + fileName + ".part" + (i + 1);
 				
 				try (RandomAccessFile partFile = new RandomAccessFile(partName, "rw")) {
 					FileChannel partFileChannel = partFile.getChannel();
@@ -210,7 +210,7 @@ public class Download implements Runnable {
 			// Delete part files
 			try {
 				for (int i = 0; i < downloadParts.size(); i++) {
-					String partName = fileName + ".part" + (i+1);
+					String partName = "." + fileName + ".part" + (i+1);
 					Path filePath = Paths.get(partName);
 					Files.deleteIfExists(filePath);
 				}
