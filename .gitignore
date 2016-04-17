@@ -27,3 +27,4 @@ target/
 *~
 *.swp
 *.swo
+/$(HOME)/DownloadManager/
