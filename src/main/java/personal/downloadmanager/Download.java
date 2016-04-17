@@ -134,6 +134,11 @@ public class Download implements Runnable {
 						startPosition, partSize);
 					
 					startPosition += transferedBytes;
+					
+					if (transferedBytes != partSize) {
+						throw new RuntimeException("Error joining file! At part: "
+							+ (i+1));
+					}
 				}
 			}
 		}

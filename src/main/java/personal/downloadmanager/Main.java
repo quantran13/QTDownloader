@@ -6,6 +6,12 @@
  */
 package personal.downloadmanager;
 
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileReader;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.net.ConnectException;
 import java.net.MalformedURLException;
@@ -14,11 +20,17 @@ import java.text.SimpleDateFormat;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Date;
+import java.util.Scanner;
 
 public class Main {
 	
 	public static int partsCount;
 	public static String url;
+	
+	private static final String PROGRAM_DIR = System.getenv("HOME") 
+	                                         + "/.QTDownloadManager";
+	private static final String DOWNLOADED_LIST_FILENAME = PROGRAM_DIR 
+		                                                   + "/.filelist.csv";
 
 	/**
 	 *
@@ -26,13 +38,56 @@ public class Main {
 	 * @throws java.lang.InterruptedException
 	 */
 	public static void main(String[] args) throws InterruptedException {
-		if (args.length != 1) {
+		if (args.length != 1 && args.length != 2) {
 			printUsage();
 			return;
 		}
 		
 		url = args[0];
 		partsCount = 8;
+		
+		// Check if the file has been downloaded or not
+		String fileName = new File(url).getName();
+		
+		try {
+			FileReader downloadedFileList = new FileReader(DOWNLOADED_LIST_FILENAME);
+			BufferedReader br = new BufferedReader(downloadedFileList);
+			String line;
+			
+			try {
+				while ((line = br.readLine()) != null) {
+					String[] wordList = line.split(", ");
+					
+					if (url.equals(wordList[1])) {
+						System.out.print("You downloaded from this URL. " +
+							"Do you want to download again? (y/n)");
+						
+						char answer = 0;
+						Scanner reader = new Scanner(System.in);
+						while (answer != 'y' && answer != 'Y' 
+							   && answer != 'n' && answer != 'N') {
+							answer = reader.next().charAt(0);
+						}
+						
+						if (answer == 'n' || answer == 'N') {
+							downloadedFileList.close();
+							br.close();
+							reader.close();
+							
+							return;
+						}
+					}
+				}
+			} catch (IOException ex) {
+				// If there's an error reading the file list then 
+				// just ignore the exception, and assume the file hasn't
+				// been downloaded before
+			}
+		} catch (FileNotFoundException ex) {
+			// Again, if the file does not exist then ignore the exception.
+			// Assume the file being downloaded hasn't been downloaded before.
+		}
+		
 		
 		// Create a Progress object to keep track of the download
 		Progress progress = new Progress();
@@ -60,7 +115,7 @@ public class Main {
 				System.out.println("Response code: " + 
 					progress.mURLVerifyResult.responseCode);
 				System.out.println("Fize size: " + 
-					progress.mURLVerifyResult.contentLength + " bytes.");
+					readableFileSize(progress.mURLVerifyResult.contentLength));
 			} else {
 				printErrorMessage(progress.ex);
 			}
@@ -112,6 +167,20 @@ public class Main {
 			System.err.println("Download thread interrupted: " + ex.getMessage());
 		}
 		
+		
+		// Save the download to the downloaded file list
+		try (FileWriter downloadFile = new FileWriter(DOWNLOADED_LIST_FILENAME, true)) {
+			try (BufferedWriter bw = new BufferedWriter(downloadFile)) {
+				String line = fileName + ", " + url + ", " 
+				              + progress.downloadedCount + "\n";
+				bw.write(line);
+			}
+		} catch (IOException ex) {
+			System.out.println("Cannot open downloaded file list: " + 
+				ex.getMessage());
+		}
+		
+		
 		// Print the current time
 		date = new Date();
 		System.out.println("Finished downloading!");
@@ -148,6 +217,23 @@ public class Main {
 		 */
 		System.err.println("\nExiting!");
 		System.exit(0);
+	}
+	
+	private static String readableFileSize(long bytes) {
+		String[] fileSizeUnits = {"bytes", "KB", "MB", "GB", "TB", "PB", "EB"};
+		String result = "";
+		
+		double size = bytes;
+		int unit = 0;
+		while (size > 1024 && unit < fileSizeUnits.length) {
+			size = size / 1024;
+			unit++;
+		}
+		
+		size = (double) Math.round(size * 100) / 100;
+		result += String.valueOf(size) + " " + fileSizeUnits[unit];
+		
+		return result;
 	}
 	
 }

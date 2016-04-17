@@ -3,14 +3,14 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>personal.quantran</groupId>
     <artifactId>DownloadManager</artifactId>
-    <version>0.1</version>
+    <version>0.3</version>
     <packaging>jar</packaging>
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven.compiler.source>1.8</maven.compiler.source>
         <maven.compiler.target>1.8</maven.compiler.target>
     </properties>
-    <name>DownloadManager</name>
+    <name>QTDownloadManager</name>
     <dependencies>
         <dependency>
             <groupId>junit</groupId>
@@ -26,6 +26,7 @@
         </dependency>
     </dependencies>
     <build>
+        <directory>${HOME}/.QTDownloadManager</directory>
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
