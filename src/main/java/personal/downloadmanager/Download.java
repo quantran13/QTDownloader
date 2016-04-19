@@ -27,6 +27,7 @@ public class Download implements Runnable {
 	private final String mUrl;
 	private final int mPartsCount;
 	private final Progress mProgress;
+	private final boolean mResume;
 	
 	private final Thread mThread;
 
@@ -36,11 +37,13 @@ public class Download implements Runnable {
 	 * @param urlString
 	 * @param partsCount
 	 * @param progress
+	 * @param resume
 	 */
-	public Download(String urlString, int partsCount, Progress progress) {
+	public Download(String urlString, int partsCount, Progress progress, boolean resume) {
 		mUrl = urlString;
 		mPartsCount = partsCount;
 		mProgress = progress;
+		mResume = resume;
 		
 		mThread = new Thread(this, "Main download thread");
 	}
@@ -103,7 +106,7 @@ public class Download implements Runnable {
 			long currentPartSize = endByte - beginByte + 1;
 
 			DownloadThread downloadThread = new DownloadThread(url, beginByte, 
-				endByte, currentPartSize, i + 1, progress);
+				endByte, currentPartSize, i + 1, progress, mResume);
 			downloadThreadsList.add(downloadThread);
 			downloadThreadsList.get(i).startDownload();
 		}

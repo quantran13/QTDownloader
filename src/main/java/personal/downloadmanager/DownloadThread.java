@@ -11,10 +11,13 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.RandomAccessFile;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -28,6 +31,7 @@ public class DownloadThread implements Runnable {
 	private long mStartByte;
 	private long mEndByte;
 	private long mPartSize;
+	private final boolean mResume;
 	private int mPart;
 	private URL mUrl;
 	private long mDownloadedSize;
@@ -45,9 +49,10 @@ public class DownloadThread implements Runnable {
 	 * @param partSize The size of the part needed to be downloaded.
 	 * @param part The part of the file being downloaded.
 	 * @param progress
+	 * @param resume Whether to resume the download or not.
 	 */
 	public DownloadThread(URL url, long startByte, long endByte, long partSize, 
-	                      int part, Progress progress) {
+	                      int part, Progress progress, boolean resume) {
 		if (startByte >= endByte) {
 			throw new RuntimeException("The start byte cannot be larger than "
 				+ "the end byte!");
@@ -56,6 +61,7 @@ public class DownloadThread implements Runnable {
 		mStartByte = startByte;
 		mEndByte = endByte;
 		mPartSize = partSize;
+		mResume = resume;
 		mUrl = url;
 		mPart = part;
 		mDownloadedSize = 0;
@@ -68,6 +74,15 @@ public class DownloadThread implements Runnable {
 		mThread = new Thread(this, "Part #" + part);
 		
 		mProgress = progress;
+		
+		// If resume a download then set the start byte
+		if (mResume) {
+			try (RandomAccessFile partFile = new RandomAccessFile(mFileName, "rw")) {
+				mStartByte += partFile.length();
+			} catch (IOException ex) {
+				// If cannot open the part file then leave the start byte as it is.
+			}
+		}
 	}
 
 	/**
@@ -117,7 +132,7 @@ public class DownloadThread implements Runnable {
 		
 		// Size of the chunk of data to be downloaded and written to the 
 		// output file at a time.
-		int chunkSize = 8192;
+		int chunkSize = (int) Math.pow(2, 21);
 
 		try (DataInputStream dataIn = new DataInputStream(is)) {
 			// Get the file's length.
@@ -193,7 +208,11 @@ public class DownloadThread implements Runnable {
 			boolean overwrite = true;
 			
 			while (mDownloadedSize < contentLength) {
+				Instant start = Instant.now();
 				result = dataIn.read(dataArray, 0, chunkSize);
+				Instant stop = Instant.now();
+				long time = Duration.between(stop, start).getNano();
+				
 				if (result == -1)
 					break;
 				
@@ -203,7 +222,17 @@ public class DownloadThread implements Runnable {
 				
 				synchronized(mProgress) {
 					mProgress.downloadedCount += result;
-					mProgress.updateProgressBar();
+					mProgress.time += time;
+					mProgress.sizeChange += result;
+					mProgress.count++;
+					
+					if (mProgress.count == 100) {
+						mProgress.updateProgressBar();
+						mProgress.time = 0;
+						mProgress.sizeChange = 0;
+						mProgress.count = 0;
+					}
+					
 					mProgress.notifyAll();
 				}
 			}
