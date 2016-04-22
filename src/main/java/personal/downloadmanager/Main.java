@@ -13,6 +13,7 @@ import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.io.RandomAccessFile;
 import java.net.ConnectException;
 import java.net.MalformedURLException;
 import java.text.DateFormat;
@@ -20,12 +21,16 @@ import java.text.SimpleDateFormat;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Date;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Scanner;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 public class Main {
 	
 	public static int partsCount;
-	public static String url;
+	public static String mURL;
 	
 	private static int lineNumber;
 	private static final String PROGRAM_DIR = System.getenv("HOME") 
@@ -44,59 +49,86 @@ public class Main {
 			return;
 		}
 		
-		url = args[0];
+		mURL = args[0];
 		partsCount = 8;
 		
 		// Check if the file has been downloaded or not
-		String fileName = new File(url).getName();
-		String downloaded = "false";
+		String fileName = new File(mURL).getName();
+		boolean downloaded = false;
 		boolean resume = false;
 		
+		HashMap<String, DownloadSession> downloadSessionList = null;
+		
 		try {
-			downloaded = fileDownloaded();
+			downloadSessionList = fileDownloaded();
 			
-			if (downloaded.equals("true")) {
-				System.out.print("You downloaded from this URL. " +
+			for (Map.Entry<String, DownloadSession> entry : downloadSessionList.entrySet()) {
+				String url = entry.getKey();
+				
+				if (url.equals(mURL)) {
+					downloaded = true;
+					
+					DownloadSession ds = entry.getValue();
+					long downloadedSize = ds.getDownloadedSize();
+
+					if (downloadedSize == -1) {
+						System.out.print("Your previous download from this URL "
+						+ "was interrupted. ");
+						System.out.print("Do you want to continue downloading? (y/n)");
+
+						char answer = 0;
+						Scanner reader = new Scanner(System.in);
+						while (answer != 'y' && answer != 'Y' 
+							   && answer != 'n' && answer != 'N') {
+							answer = reader.next().charAt(0);
+						}
+
+						if (answer == 'y' || answer == 'Y') {
+							resume = true;
+						}
+						
+						break;
+					} else {
+						System.out.print("You downloaded from this URL. " +
 							"Do you want to download again? (y/n)");
 						
-				char answer = 0;
-				Scanner reader = new Scanner(System.in);
-				while (answer != 'y' && answer != 'Y' 
-					   && answer != 'n' && answer != 'N') {
-					answer = reader.next().charAt(0);
-				}
+						char answer = 0;
+						Scanner reader = new Scanner(System.in);
+						while (answer != 'y' && answer != 'Y' 
+							   && answer != 'n' && answer != 'N') {
+							answer = reader.next().charAt(0);
+						}
 
-				if (answer == 'n' || answer == 'N')
-					return;
-			} else if (downloaded.equals("interrupted")) {
-				System.out.print("Your previous download from this URL "
-					+ "was interrupted. ");
-				System.out.print("Do you want to continue downloading? (y/n)");
-						
-				char answer = 0;
-				Scanner reader = new Scanner(System.in);
-				while (answer != 'y' && answer != 'Y' 
-					   && answer != 'n' && answer != 'N') {
-					answer = reader.next().charAt(0);
-				}
-				
-				if (answer == 'y' || answer == 'Y') {
-					resume = true;
+						if (answer == 'n' || answer == 'N')
+							return;
+						}
+					
+					break;
 				}
 			}
 		} catch (IOException ex) {
 			printErrorMessage(ex);
 		}
 		
-		// Write the download info to the file.
-		if (downloaded.equals("false"))
-			// If the file hasn't been downloaded before.
-			try {
-				writeDownloadInfo(fileName, url);
-			} catch (IOException ex) {
-				printErrorMessage(ex);
-			}
+		// If failed to read from the download list file
+		// create a new hashmap for the download sessions list
+		if (downloadSessionList == null)
+			downloadSessionList = new HashMap<>();
 		
+		DownloadSession ds;
+		if (downloaded) {
+			ds = downloadSessionList.get(mURL);
+			ds.setDownloadSize(-1);
+		} else {
+			ds = new DownloadSession(fileName, mURL, -1);
+			downloadSessionList.put(mURL, ds);
+		}
+		
+		try {
+			writeInfo(downloadSessionList);
+		} catch (IOException ex) {
+			printErrorMessage(ex);
+		}
 		
 		// Create a Progress object to keep track of the download
 		Progress progress = new Progress();
@@ -105,9 +137,9 @@ public class Main {
 		DateFormat dateFormat = new SimpleDateFormat("dd-MM-yyyy HH:mm:ss");
 		Date date = new Date();
 		System.out.println("--- " + dateFormat.format(date) + " ---\n");
-		System.out.println("Downloading from: " + url);
+		System.out.println("Downloading from: " + mURL);
 	
-		Download newDownload = new Download(url, partsCount, progress, resume);
+		Download newDownload = new Download(mURL, partsCount, progress, resume);
 
 		// Start the download.
 		Instant start = Instant.now();
@@ -178,14 +210,13 @@ public class Main {
 		
 		
 		// Save the download to the downloaded file list
-		if (downloaded.equals("false"))
-			try {
-				// If the file hasn't been downloaded before.
-				writeDownloadInfo(progress.downloadedCount);
-			} catch (IOException ex) {
-				printErrorMessage(ex);
-			}
-			
+		ds.setDownloadSize(progress.downloadedCount);
+		try {
+			writeInfo(downloadSessionList);
+		} catch (IOException ex) {
+			printErrorMessage(ex);
+		}
+		
 		
 		// Print the current time
 		date = new Date();
@@ -223,7 +254,7 @@ public class Main {
 			System.err.println("\nOne of the thread was interrupted: " + 
 				ex.getMessage());
 		} else if (ex instanceof RuntimeException) {
-			System.err.println(ex.getMessage());
+			System.err.println("\n" + ex.getMessage());
 		}
 		
 		/*
@@ -232,55 +263,17 @@ public class Main {
 		System.err.println("\nExiting!");
 		System.exit(0);
 	}
-
-	/**
-	 * Write the file name and URL of the file being downloaded to the 
-	 * downloaded file list.
-	 * 
-	 * @param fileName Name of the file being downloaded.
-	 * @param url URL from which the current file is downloaded from.
-	 * 
-	 * @throws IOException If failed to open the downloaded file list.
-	 */
-	private static void writeDownloadInfo(String fileName, String url) throws IOException {
-		try (FileWriter downloadFile = new FileWriter(DOWNLOADED_LIST_FILENAME,
-				                                          true)) {
-			try (BufferedWriter bw = new BufferedWriter(downloadFile)) {
-				String line = fileName + ", " + url;
-				bw.write(line);
-			}
-		}
-	}
-
-	/**
-	 * Write the number of bytes downloaded to the downloaded file list.
-	 * 
-	 * @param downloadedCount Number of bytes downloaded.
-	 * 
-	 * @throws IOException if failed to open the downloaded file list.
-	 */
-	private static void writeDownloadInfo(long downloadedCount) throws IOException {
-		try (FileWriter downloadFile = new FileWriter(DOWNLOADED_LIST_FILENAME,
-				                                          true)) {
-			try (BufferedWriter bw = new BufferedWriter(downloadFile)) {
-				String line = ", " + String.valueOf(downloadedCount) + "\n";
-				bw.write(line);
-			}
-		}
-	}
 	
 	/**
 	 * Check if the file being downloaded has been downloaded before or not.
 	 * 
-	 * @return "true" if the file has been downloaded, "false" if the file
-	 * hasn't been downloaded, "interrupted" if the downloading of the file
-	 * was interrupted.
+	 * @return A hashmap containing the information of the downloaded files,
+	 * with the URL as key and an object of type DownloadSession as value.
 	 * 
 	 * @throws IOException If failed to open the downloaded file list.
 	 */
-	private static String fileDownloaded() throws IOException {
-		String downloaded = "false";
-		int counter = 0;
+	private static HashMap<String, DownloadSession> fileDownloaded() throws IOException {
+		HashMap<String, DownloadSession> downloadedList = new HashMap<>();
 		
 		try (FileReader downloadedFileList = new FileReader(DOWNLOADED_LIST_FILENAME);
 				BufferedReader br = new BufferedReader(downloadedFileList)) {
@@ -288,17 +281,26 @@ public class Main {
 			
 			try {
 				while ((line = br.readLine()) != null) {
-					counter++;
-					String[] wordList = line.split(", ");
+					String[] wordList = line.split(",");
 					
-					if (wordList.length == 3 && url.equals(wordList[1])) {
-						downloaded = "true";
-						lineNumber = counter;
-						break;
-					} else if (wordList.length == 2 && url.equals(wordList[1])) {
-						downloaded = "interrupted";
-						lineNumber = counter;
-						break;
+					if (wordList.length == 3) {
+						String fileName = wordList[0];
+						String downloadUrl = wordList[1];
+						long downloadedSize = Long.parseLong(wordList[2]);
+						
+						DownloadSession ds = new DownloadSession(fileName, 
+							downloadUrl, downloadedSize);
+						
+						downloadedList.put(downloadUrl, ds);
+					} else if (wordList.length == 2) {
+						String fileName = wordList[0];
+						String downloadUrl = wordList[1];
+						long downloadedSize = -1;
+						
+						DownloadSession ds = new DownloadSession(fileName, 
+							downloadUrl, downloadedSize);
+						
+						downloadedList.put(downloadUrl, ds);
 					}
 				}
 			} catch (IOException ex) {
@@ -311,6 +313,30 @@ public class Main {
 			// Assume the file being downloaded hasn't been downloaded before.
 		}
 		
-		return downloaded;
+		return downloadedList;
+	}
+
+	/**
+	 * 
+	 * @param sessionList
+	 * @throws IOException 
+	 */
+	private static void writeInfo(HashMap<String, DownloadSession> sessionList) throws IOException {
+		String tmpFileName = ".filelist.csv";
+		
+		try (FileWriter tmpFile = new FileWriter(tmpFileName, false);
+				BufferedWriter wr = new BufferedWriter(tmpFile)) {
+			for (Map.Entry<String, DownloadSession> entry : sessionList.entrySet()) {
+				DownloadSession session = entry.getValue();
+				String url = entry.getKey();
+				String fileName = session.getFileName();
+				long downloadedSize = session.getDownloadedSize();
+				
+				String line = fileName + "," + url + ",";
+				line += String.valueOf(downloadedSize) + "\n";
+				
+				wr.write(line);
+			}
+		}
 	}
 }

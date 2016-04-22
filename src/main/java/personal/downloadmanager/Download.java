@@ -72,6 +72,8 @@ public class Download implements Runnable {
 
 			// Return the content size
 			HttpResult result = new HttpResult(responseCode, contentSize);
+			
+			//System.out.println(conn.);
 
 			return result;
 		} catch (IOException ex) {
@@ -206,7 +208,7 @@ public class Download implements Runnable {
 				currentThread.joinThread();
 				if (currentThread.getDownloadedSize() != currentThread.getPartSize()) {
 					throw new RuntimeException("Download incompleted at part "
-						+ (i + 1));
+						+ (i + 1) + ": " + currentThread.getDownloadedSize());
 				}
 			}
 			

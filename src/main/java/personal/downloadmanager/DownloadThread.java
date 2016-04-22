@@ -18,8 +18,6 @@ import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
 /**
  *
@@ -35,8 +33,9 @@ public class DownloadThread implements Runnable {
 	private int mPart;
 	private URL mUrl;
 	private long mDownloadedSize;
+	private long mAlreadyDownloaded;
 	
-	public final String mFileName;
+	private final String mFileName;
 	
 	private final Progress mProgress;
 
@@ -65,6 +64,7 @@ public class DownloadThread implements Runnable {
 		mUrl = url;
 		mPart = part;
 		mDownloadedSize = 0;
+		mAlreadyDownloaded = 0;
 		
 		// Get the file name.
 		mFileName = "." + (new File(mUrl.toExternalForm()).getName() + ".part" 
@@ -78,7 +78,12 @@ public class DownloadThread implements Runnable {
 		// If resume a download then set the start byte
 		if (mResume) {
 			try (RandomAccessFile partFile = new RandomAccessFile(mFileName, "rw")) {
-				mStartByte += partFile.length();
+				mAlreadyDownloaded = partFile.length();
+				mStartByte += mAlreadyDownloaded;
+				mDownloadedSize += mAlreadyDownloaded;
+				
+//				System.out.println(mThread.getName() + ": downloaded "
+//					+ partFile.length() + "\nStart: " + mStartByte);
 			} catch (IOException ex) {
 				// If cannot open the part file then leave the start byte as it is.
 			}
@@ -137,8 +142,7 @@ public class DownloadThread implements Runnable {
 		try (DataInputStream dataIn = new DataInputStream(is)) {
 			// Get the file's length.
 			long contentLength = conn.getContentLengthLong();
-			
-			mDownloadedSize = 0;
+			contentLength += mAlreadyDownloaded;
 			
 			/*
 			 * The first method of downloading has the same performance as the
@@ -206,6 +210,13 @@ public class DownloadThread implements Runnable {
 			// be changed to false, which means the next times the data is 
 			// written it is appended to the file.
 			boolean overwrite = true;
+			if (mResume)
+				overwrite = false;
+			
+			synchronized(mProgress) {
+				mProgress.downloadedCount += mDownloadedSize;
+				mProgress.notifyAll();
+			}
 			
 			while (mDownloadedSize < contentLength) {
 				Instant start = Instant.now();
@@ -286,8 +297,8 @@ public class DownloadThread implements Runnable {
 			// Download to file
 			downloadToFile(conn);
 		} catch (IOException ex) {
-			Logger.getLogger(DownloadThread.class.getName()).log(Level.SEVERE, null, ex);
-			throw new RuntimeException("Cannot connect to the given URL!");
+//			Logger.getLogger(DownloadThread.class.getName()).log(Level.SEVERE, null, ex);
+//			throw new RuntimeException("Cannot connect to the given URL!");
 		}
 	}
 
