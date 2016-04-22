@@ -144,61 +144,6 @@ public class DownloadThread implements Runnable {
 			long contentLength = conn.getContentLengthLong();
 			contentLength += mAlreadyDownloaded;
 			
-			/*
-			 * The first method of downloading has the same performance as the
-			 * second one. However I prefer the second one (partly because 
-			 * initially I thought it would be better), so I used the second one.
-			 * Feel free to improve the algorithm, and if you find a faster way
-			 * please let me know :)
-			 *
-			 * Btw, the first method is commented out below.
-			 */
-			 
-			/*
-			// Read 1 byte at a time until the data array is full and write the
-			// data to the output file.
-			int mainArraySize;
-			int subArraySize = 0;
-			boolean useSubArray;
-			long arrayCount = contentLength / chunkSize;
-			
-			if (contentLength <= chunkSize) {
-				mainArraySize = (int) contentLength;
-				useSubArray = false;
-			} else {
-				mainArraySize = chunkSize;
-				subArraySize = (int) contentLength % chunkSize;
-				useSubArray = true;
-			}
-			
-			byte[] mainArray = new byte[mainArraySize];
-			byte[] subArray = new byte[subArraySize];
-
-			// Download to byte array
-			byte b; // the current byte value
-			boolean overwrite = true;
-			
-			for (int i = 0; i < contentLength; i++) {
-				b = dataIn.readByte();
-				mDownloadedSize++;
-				
-				if (i >= arrayCount * chunkSize && useSubArray) {
-					subArray[i % chunkSize] = b;
-				} else {
-					mainArray[i % chunkSize] = b;
-					if ((i + 1) % chunkSize == 0) {
-						writeToFile(mainArray, mainArraySize, overwrite);
-						overwrite = false;
-					}
-				}
-			}
-			
-			// Write data to file
-			if (useSubArray) 
-				writeToFile(subArray, subArraySize, overwrite);
-			*/
-
-			
 			// Read a chunk of given size at time and write the actual amount
 			// of bytes read to the output file.
 			byte[] dataArray = new byte[chunkSize];
@@ -218,6 +163,8 @@ public class DownloadThread implements Runnable {
 				mProgress.notifyAll();
 			}
 			
+			// While the total downloaded size is still smaller than the 
+			// content length from the connection, keep reading data.
 			while (mDownloadedSize < contentLength) {
 				Instant start = Instant.now();
 				result = dataIn.read(dataArray, 0, chunkSize);
