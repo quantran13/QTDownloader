@@ -14,7 +14,9 @@ import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.net.ConnectException;
+import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
+import java.net.URL;
 import java.nio.file.InvalidPathException;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
@@ -26,6 +28,8 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Scanner;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 public class Main {
 
@@ -42,8 +46,13 @@ public class Main {
      * @throws java.lang.InterruptedException
      */
     public static void main(String[] args) throws InterruptedException {
+        if (args.length == 0) {
+            printUsage(args);
+            System.exit(0);
+        }
+        
         // Read the arguments
-        HashMap<String, String> userOptions;
+        HashMap<String, String> userOptions = new HashMap<>();
         try {
             userOptions = readArgumentOptions(args);
         } catch (RuntimeException ex) {
@@ -209,14 +218,17 @@ public class Main {
      * @param args Array of arguments.
      */
     private static HashMap<String, String> readArgumentOptions(String[] args) throws RuntimeException {
-        ArrayList<String> validOptions = new ArrayList<>(Arrays.asList("-o"));
+        ArrayList<String> validOptions = new ArrayList<>(Arrays.asList("-o", "-h", "--help"));
         HashMap<String, String> userOptions = new HashMap<>();
 
-        for (int i = 0; i < args.length - 1; i++) {
+        for (int i = 0; i < args.length; i++) {
             String arg = args[i];
             
             if (validOptions.contains(arg)) {
-                String optionValue = args[++i];
+                String optionValue = null;
+                try {
+                    optionValue = args[i + 1];
+                } catch (ArrayIndexOutOfBoundsException ex) {}
 
                 switch (arg) {
                     case "-o": {
@@ -241,11 +253,35 @@ public class Main {
                         }
         
                         userOptions.put("-o", optionValue);
+                        i++;
+                        break;
                     }
+                    case "-h":
+                    case "--help": {
+                        /*
+                         * Print the usage then exit.
+                         */
+                        printUsage(args);
+                        System.exit(0);
+                    }
+                    default:
+                        break;
                 }
             } else {
-                String errMessage = "qtdownloader: Invalid option - \"" + arg + "\"";
-                throw new RuntimeException(errMessage);
+                try {
+                    URL url = new URL(arg);
+                    HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+                    connection.setRequestMethod("HEAD");
+                    connection.connect();
+                    
+                    if (i != args.length - 1) {
+                        String errMessage = "qtdownloader: URL must be at the end!";
+                        throw new RuntimeException(errMessage);
+                    }
+                } catch (IOException ex) {
+                    String errMessage = "qtdownloader: Invalid option - \"" + arg + "\"";
+                    throw new RuntimeException(errMessage);
+                }
             }
         }
         
@@ -255,9 +291,13 @@ public class Main {
     /**
      * Print the usage.
      */
-//    private static void printUsage() {
-//        System.err.println("Usage: java -jar qtdownloader.jar <url>\n");
-//    }
+    private static void printUsage(String[] args) {
+        System.err.println("\nUsage: java -jar qtdownloader.jar [OPTIONS] URL");
+        System.err.println("\nOptions: ");
+        System.err.println("\t-o <output directory>\t\tOutput directory for the"
+                + " downloaded file (NOT the output file path).");
+        System.err.println();
+    }
 
     /**
      * Print the appropriate error message for the given exception.
@@ -282,7 +322,7 @@ public class Main {
             System.err.println("\nOne of the thread was interrupted: "
                     + ex.getMessage());
         } else if (ex instanceof RuntimeException) {
-            System.err.println("\n" + ex.getMessage());
+            System.err.println(Arrays.toString(ex.getStackTrace()));
         }
 
         /*
