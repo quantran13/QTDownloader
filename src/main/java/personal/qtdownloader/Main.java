@@ -43,12 +43,11 @@ public class Main {
      */
     public static void main(String[] args) throws InterruptedException {
         // Read the arguments
-        // TODO get the result of the readOptions
+        HashMap<String, String> userOptions;
         try {
-            readArgumentOptions(args);
+            userOptions = readArgumentOptions(args);
         } catch (RuntimeException ex) {
-            System.err.println(ex.getMessage());
-            return;
+            printErrorMessage(ex);
         }
         
         mURL = args[args.length - 1]; // The url is the last argument.
@@ -72,7 +71,7 @@ public class Main {
         
         // If the last attempt to download the file was interrupted and
         // the user chose to resume downloading.
-        boolean resume = currentDownloadSession.resumeDownload;
+        userOptions.put("resume", currentDownloadSession.resumeDownload ? "y" : "n");
 
         // If the user chooses to cancel downloading, exit the program
         if (currentDownloadSession.cancelDownload) {
@@ -110,7 +109,7 @@ public class Main {
         System.out.println("--- " + dateFormat.format(date) + " ---\n");
         System.out.println("Downloading from: " + mURL);
 
-        Download newDownload = new Download(mURL, partsCount, progress, resume);
+        Download newDownload = new Download(mURL, partsCount, progress, userOptions);
 
         // Start the download.
         Instant start = Instant.now();
@@ -209,8 +208,9 @@ public class Main {
      * 
      * @param args Array of arguments.
      */
-    private static void readArgumentOptions(String[] args) throws RuntimeException {
+    private static HashMap<String, String> readArgumentOptions(String[] args) throws RuntimeException {
         ArrayList<String> validOptions = new ArrayList<>(Arrays.asList("-o"));
+        HashMap<String, String> userOptions = new HashMap<>();
 
         for (int i = 0; i < args.length - 1; i++) {
             String arg = args[i];
@@ -239,9 +239,8 @@ public class Main {
                                     + optionValue;
                             throw new RuntimeException(errMessage);
                         }
-                        
-                        // TODO save/return the output folder path to save 
-                        // the downloaded file later.
+        
+                        userOptions.put("-o", optionValue);
                     }
                 }
             } else {
@@ -249,14 +248,16 @@ public class Main {
                 throw new RuntimeException(errMessage);
             }
         }
+        
+        return userOptions;
     }
 
     /**
      * Print the usage.
      */
-    private static void printUsage() {
-        System.err.println("Usage: java -jar qtdownloader.jar <url>\n");
-    }
+//    private static void printUsage() {
+//        System.err.println("Usage: java -jar qtdownloader.jar <url>\n");
+//    }
 
     /**
      * Print the appropriate error message for the given exception.

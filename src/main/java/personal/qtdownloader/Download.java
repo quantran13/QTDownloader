@@ -18,6 +18,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashMap;
 
 /**
  *
@@ -29,6 +30,7 @@ public class Download implements Runnable {
     private final int mPartsCount;
     private final Progress mProgress;
     private final boolean mResume;
+    private final String mOutputDirectory;
 
     private final Thread mThread;
 
@@ -38,13 +40,16 @@ public class Download implements Runnable {
      * @param urlString
      * @param partsCount
      * @param progress
-     * @param resume
+     * @param userOptions
      */
-    public Download(String urlString, int partsCount, Progress progress, boolean resume) {
+    public Download(String urlString, int partsCount, Progress progress, HashMap<String, String> userOptions) {
         mUrl = urlString;
         mPartsCount = partsCount;
         mProgress = progress;
-        mResume = resume;
+        mResume = "y".equals(userOptions.get("resume"));
+        
+        String outputDir = userOptions.get("-o");
+        mOutputDirectory = (userOptions.containsKey("o")) ? outputDir : "./";
 
         mThread = new Thread(this, "Main download thread");
     }
@@ -127,7 +132,9 @@ public class Download implements Runnable {
      * @throws java.io.IOException if failed to open the output file.
      */
     public void joinDownloadedParts(String fileName, ArrayList<DownloadThread> downloadParts) throws IOException {
-        try (RandomAccessFile mainFile = new RandomAccessFile(fileName, "rw")) {
+        String outputFile = mOutputDirectory + fileName;
+        
+        try (RandomAccessFile mainFile = new RandomAccessFile(outputFile, "rw")) {
             FileChannel mainChannel = mainFile.getChannel();
             long startPosition = 0;
 
