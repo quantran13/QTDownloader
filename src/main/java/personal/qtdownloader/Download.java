@@ -31,6 +31,8 @@ public class Download implements Runnable {
     private final Progress mProgress;
     private final boolean mResume;
     private final String mOutputDirectory;
+    private final String mFileName;
+    private final String mOriginalFileName;
 
     private final Thread mThread;
 
@@ -49,7 +51,11 @@ public class Download implements Runnable {
         mResume = "y".equals(userOptions.get("resume"));
         
         String outputDir = userOptions.get("-o");
-        mOutputDirectory = (userOptions.containsKey("o")) ? outputDir : "./";
+        mOutputDirectory = (userOptions.containsKey("-o")) ? outputDir : "./";
+        
+        String fileName = userOptions.get("-f");
+        mFileName = (userOptions.containsKey("-f")) ? fileName : (new File(mUrl).getName());
+        mOriginalFileName = new File(mUrl).getName();
 
         mThread = new Thread(this, "Main download thread");
     }
@@ -131,7 +137,8 @@ public class Download implements Runnable {
      *
      * @throws java.io.IOException if failed to open the output file.
      */
-    public void joinDownloadedParts(String fileName, ArrayList<DownloadThread> downloadParts) throws IOException {
+    public void joinDownloadedParts(String fileName, ArrayList<DownloadThread> downloadParts) 
+            throws IOException {
         String outputFile = mOutputDirectory + fileName;
         
         try (RandomAccessFile mainFile = new RandomAccessFile(outputFile, "rw")) {
@@ -139,7 +146,7 @@ public class Download implements Runnable {
             long startPosition = 0;
 
             for (int i = 0; i < downloadParts.size(); i++) {
-                String partName = "." + fileName + ".part" + (i + 1);
+                String partName = "." + mOriginalFileName + ".part" + (i + 1);
 
                 try (RandomAccessFile partFile = new RandomAccessFile(partName, "rw")) {
                     long partSize = downloadParts.get(i).getDownloadedSize();
@@ -150,8 +157,10 @@ public class Download implements Runnable {
                     startPosition += transferedBytes;
 
                     if (transferedBytes != partSize) {
-                        throw new RuntimeException("Error joining file! At part: "
-                                + (i + 1));
+                        String errMessage = "Error joining file at part: " 
+                                + (i + 1) + "!\n";
+                        errMessage += "Transfered bytes: " + transferedBytes;
+                        throw new RuntimeException(errMessage);
                     }
                 }
             }
@@ -181,7 +190,7 @@ public class Download implements Runnable {
     public void run() {
         try {
             // Get the file name and create the URL object
-            String fileName = new File(mUrl).getName();
+            String fileName = mFileName;
             URL url = new URL(mUrl);
 
             // Check the validity of the URL

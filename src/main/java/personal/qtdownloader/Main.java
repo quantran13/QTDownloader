@@ -28,8 +28,6 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Scanner;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
 public class Main {
 
@@ -218,7 +216,8 @@ public class Main {
      * @param args Array of arguments.
      */
     private static HashMap<String, String> readArgumentOptions(String[] args) throws RuntimeException {
-        ArrayList<String> validOptions = new ArrayList<>(Arrays.asList("-o", "-h", "--help"));
+        ArrayList<String> validOptions = new ArrayList<>(Arrays.asList("-o", 
+                "-h", "--help", "-f"));
         HashMap<String, String> userOptions = new HashMap<>();
 
         for (int i = 0; i < args.length; i++) {
@@ -253,6 +252,15 @@ public class Main {
                         }
         
                         userOptions.put("-o", optionValue);
+                        i++;
+                        break;
+                    }
+                    case "-f": {
+                        /*
+                         * -f: Output file name.
+                         */
+                        
+                        userOptions.put("-f", optionValue);
                         i++;
                         break;
                     }
@@ -323,6 +331,7 @@ public class Main {
                     + ex.getMessage());
         } else if (ex instanceof RuntimeException) {
             System.err.println(Arrays.toString(ex.getStackTrace()));
+            System.err.println(ex.getMessage());
         }
 
         /*
