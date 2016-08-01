@@ -18,6 +18,7 @@ import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.time.Duration;
 import java.time.Instant;
+import static personal.qtdownloader.Main.PROGRAM_TEMP_DIR;
 
 /**
  *
@@ -68,8 +69,8 @@ public class DownloadThread implements Runnable {
         mAlreadyDownloaded = 0;
 
         // Get the file name.
-        mFileName = "." + (new File(mUrl.toExternalForm()).getName() + ".part"
-                + mPart);
+        mFileName = Main.PROGRAM_TEMP_DIR + "." + (new File(mUrl.toExternalForm()).getName()
+                + ".part" + mPart);
 
         // Initialize the thread
         mThread = new Thread(this, "Part #" + part);

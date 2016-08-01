@@ -33,6 +33,7 @@ public class Download implements Runnable {
     private final String mOutputDirectory;
     private final String mFileName;
     private final String mOriginalFileName;
+    private final String[] mPartNameLists;
 
     private final Thread mThread;
 
@@ -44,7 +45,8 @@ public class Download implements Runnable {
      * @param progress
      * @param userOptions
      */
-    public Download(String urlString, int partsCount, Progress progress, HashMap<String, String> userOptions) {
+    public Download(String urlString, int partsCount, Progress progress, 
+            HashMap<String, String> userOptions) {
         mUrl = urlString;
         mPartsCount = partsCount;
         mProgress = progress;
@@ -56,6 +58,11 @@ public class Download implements Runnable {
         String fileName = userOptions.get("-f");
         mFileName = (userOptions.containsKey("-f")) ? fileName : (new File(mUrl).getName());
         mOriginalFileName = new File(mUrl).getName();
+        
+        mPartNameLists = new String[partsCount];
+        for (int i = 0; i < partsCount; i++)
+            mPartNameLists[i] = Main.PROGRAM_TEMP_DIR + "." + mOriginalFileName +
+                    ".part" + (i + 1);
 
         mThread = new Thread(this, "Main download thread");
     }
@@ -146,8 +153,8 @@ public class Download implements Runnable {
             long startPosition = 0;
 
             for (int i = 0; i < downloadParts.size(); i++) {
-                String partName = "." + mOriginalFileName + ".part" + (i + 1);
-
+                String partName = mPartNameLists[i];
+                
                 try (RandomAccessFile partFile = new RandomAccessFile(partName, "rw")) {
                     long partSize = downloadParts.get(i).getDownloadedSize();
                     FileChannel partFileChannel = partFile.getChannel();
@@ -246,7 +253,7 @@ public class Download implements Runnable {
             // Delete part files
             try {
                 for (int i = 0; i < downloadParts.size(); i++) {
-                    String partName = "." + fileName + ".part" + (i + 1);
+                    String partName = mPartNameLists[i];
                     Path filePath = Paths.get(partName);
                     Files.deleteIfExists(filePath);
                 }

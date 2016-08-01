@@ -22,22 +22,59 @@ import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Scanner;
+import java.util.Set;
 
 public class Main {
 
     public static String mURL;
 
-    private static final String PROGRAM_DIR = System.getenv("HOME")
-            + "/.QTDownloader";
-    private static final String DOWNLOADED_LIST_FILENAME = PROGRAM_DIR
-            + "/.filelist.csv";
-
+    public static final String PROGRAM_DIR;
+    public static final String DOWNLOADED_LIST_FILENAME;
+    public static final String PROGRAM_TEMP_DIR;
+    public static final HashMap<String, String> cmdLineOptions;
+    
+    static {
+        cmdLineOptions = new HashMap<>();
+        cmdLineOptions.put("-o", "Output file's directory");
+        cmdLineOptions.put("-f", "Output file name");
+        cmdLineOptions.put("-h", "Print usage");
+        cmdLineOptions.put("--help", "Print usage");
+        
+        String programDir = System.getenv("HOME") + "/.QTDownloader";
+        DOWNLOADED_LIST_FILENAME = programDir + "/.filelist.csv";
+        String programTmpDir = programDir + "/tmp/";
+        
+        // Create the tmp folder if it doesn't exist
+        File tmpDir = new File(programDir + "/tmp/");
+        
+        if (!tmpDir.exists()) {
+            boolean mkdirSuccess = false;
+            
+            try {
+                mkdirSuccess = tmpDir.mkdir();
+            } catch (SecurityException se) {
+                System.err.println(se.getMessage());
+                System.exit(0);
+            }
+            
+            if (!mkdirSuccess)
+                programTmpDir = programDir;
+        }
+        
+        if (System.getProperty("os.name").toLowerCase().contains("windows")) {
+            programDir = programDir.replace("/", "\\");
+            programTmpDir = programTmpDir.replace("/", "\\");
+        }
+        
+        PROGRAM_DIR = programDir;
+        PROGRAM_TEMP_DIR = programTmpDir;
+    }
+    
     /**
      *
      * @param args Array of arguments.
@@ -216,8 +253,7 @@ public class Main {
      * @param args Array of arguments.
      */
     private static HashMap<String, String> readArgumentOptions(String[] args) throws RuntimeException {
-        ArrayList<String> validOptions = new ArrayList<>(Arrays.asList("-o", 
-                "-h", "--help", "-f"));
+        Set<String> validOptions = cmdLineOptions.keySet();
         HashMap<String, String> userOptions = new HashMap<>();
 
         for (int i = 0; i < args.length; i++) {
@@ -250,6 +286,9 @@ public class Main {
                                     + optionValue;
                             throw new RuntimeException(errMessage);
                         }
+                        
+                        if (optionValue.charAt(optionValue.length() - 1) != '/')
+                            optionValue = optionValue + "/";
         
                         userOptions.put("-o", optionValue);
                         i++;
@@ -302,8 +341,11 @@ public class Main {
     private static void printUsage(String[] args) {
         System.err.println("\nUsage: java -jar qtdownloader.jar [OPTIONS] URL");
         System.err.println("\nOptions: ");
-        System.err.println("\t-o <output directory>\t\tOutput directory for the"
-                + " downloaded file (NOT the output file path).");
+        
+        cmdLineOptions.keySet().stream().forEach((option) -> {
+            System.err.println(option + ": " + cmdLineOptions.get(option));
+        });
+        
         System.err.println();
     }
 
