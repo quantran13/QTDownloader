@@ -18,6 +18,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.HashMap;
 
 /**
@@ -34,6 +35,7 @@ public class Download implements Runnable {
     private final String mFileName;
     private final String mOriginalFileName;
     private final String[] mPartNameLists;
+    private final HashMap<String, String> mUserOptions;
 
     private final Thread mThread;
 
@@ -43,26 +45,26 @@ public class Download implements Runnable {
      * @param urlString
      * @param partsCount
      * @param progress
-     * @param userOptions
      */
-    public Download(String urlString, int partsCount, Progress progress, 
-            HashMap<String, String> userOptions) {
+    public Download(String urlString, int partsCount, Progress progress) {
         mUrl = urlString;
         mPartsCount = partsCount;
         mProgress = progress;
-        mResume = "y".equals(userOptions.get("resume"));
-        
-        String outputDir = userOptions.get("-o");
-        mOutputDirectory = (userOptions.containsKey("-o")) ? outputDir : "./";
-        
-        String fileName = userOptions.get("-f");
-        mFileName = (userOptions.containsKey("-f")) ? fileName : (new File(mUrl).getName());
+        mUserOptions = Main.userOptions;
+        mResume = "y".equals(mUserOptions.get("resume"));
+
+        String outputDir = mUserOptions.get("-o");
+        mOutputDirectory = (mUserOptions.containsKey("-o")) ? outputDir : "./";
+
+        String fileName = mUserOptions.get("-f");
+        mFileName = (mUserOptions.containsKey("-f")) ? fileName : (new File(mUrl).getName());
         mOriginalFileName = new File(mUrl).getName();
-        
+
         mPartNameLists = new String[partsCount];
-        for (int i = 0; i < partsCount; i++)
-            mPartNameLists[i] = Main.PROGRAM_TEMP_DIR + "." + mOriginalFileName +
-                    ".part" + (i + 1);
+        for (int i = 0; i < partsCount; i++) {
+            mPartNameLists[i] = Main.PROGRAM_TEMP_DIR + "." + mOriginalFileName
+                    + ".part" + (i + 1);
+        }
 
         mThread = new Thread(this, "Main download thread");
     }
@@ -71,8 +73,7 @@ public class Download implements Runnable {
      * Check the validity of the given URL.
      *
      * @param urlString The given URL.
-     * @return The content size from the requested URL. If -1 then the response
-     * from the server is not success.
+     * @return The content size from the requested URL. If -1 then the response from the server is not success.
      *
      * @throws ConnectException if failed to connect to the given URL.
      */
@@ -83,6 +84,16 @@ public class Download implements Runnable {
 
             // Connect to the created connection.
             conn.setRequestMethod("HEAD");
+            
+            if (mUserOptions.containsKey("-u") && mUserOptions.containsKey("-p")) {
+                String username = mUserOptions.get("-u");
+                String password = mUserOptions.get("-p");
+                String credentials = username + ":" + password;
+                credentials = Base64.getEncoder().encodeToString(credentials.getBytes());
+                
+                conn.setRequestProperty("Authorization", "Basic " + credentials);
+            }
+            
             conn.connect();
 
             // Check for the response code
@@ -91,7 +102,7 @@ public class Download implements Runnable {
 
             // Return the content size
             HttpResult result = new HttpResult(responseCode, contentSize);
-            
+
             return result;
         } catch (IOException ex) {
             throw new ConnectException(ex.getMessage());
@@ -136,25 +147,24 @@ public class Download implements Runnable {
     }
 
     /**
-     * Join the downloaded parts together into the file with the given file
-     * name.
+     * Join the downloaded parts together into the file with the given file name.
      *
      * @param fileName Name of output file.
      * @param downloadParts An ArrayList of download threads.
      *
      * @throws java.io.IOException if failed to open the output file.
      */
-    public void joinDownloadedParts(String fileName, ArrayList<DownloadThread> downloadParts) 
+    public void joinDownloadedParts(String fileName, ArrayList<DownloadThread> downloadParts)
             throws IOException {
         String outputFile = mOutputDirectory + fileName;
-        
+
         try (RandomAccessFile mainFile = new RandomAccessFile(outputFile, "rw")) {
             FileChannel mainChannel = mainFile.getChannel();
             long startPosition = 0;
 
             for (int i = 0; i < downloadParts.size(); i++) {
                 String partName = mPartNameLists[i];
-                
+
                 try (RandomAccessFile partFile = new RandomAccessFile(partName, "rw")) {
                     long partSize = downloadParts.get(i).getDownloadedSize();
                     FileChannel partFileChannel = partFile.getChannel();
@@ -164,7 +174,7 @@ public class Download implements Runnable {
                     startPosition += transferedBytes;
 
                     if (transferedBytes != partSize) {
-                        String errMessage = "Error joining file at part: " 
+                        String errMessage = "Error joining file at part: "
                                 + (i + 1) + "!\n";
                         errMessage += "Transfered bytes: " + transferedBytes;
                         throw new RuntimeException(errMessage);
@@ -221,7 +231,7 @@ public class Download implements Runnable {
 
             // Start threads to download.
             ArrayList<DownloadThread> downloadParts;
-            
+
             mProgress.startDownloadTimeStamp = Instant.now();
 
             try {

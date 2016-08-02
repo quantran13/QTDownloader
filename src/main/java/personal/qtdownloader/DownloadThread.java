@@ -18,7 +18,8 @@ import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.time.Duration;
 import java.time.Instant;
-import static personal.qtdownloader.Main.PROGRAM_TEMP_DIR;
+import java.util.Base64;
+import java.util.HashMap;
 
 /**
  *
@@ -37,12 +38,11 @@ public class DownloadThread implements Runnable {
     private long mAlreadyDownloaded;
 
     private final String mFileName;
-
     private final Progress mProgress;
+    private final HashMap<String, String> mUserOptions;
 
     /**
-     * Construct a download object with the given URL and byte range to
-     * downloads
+     * Construct a download object with the given URL and byte range to downloads
      *
      * @param url The URL to download from.
      * @param startByte The starting byte.
@@ -67,6 +67,7 @@ public class DownloadThread implements Runnable {
         mPart = part;
         mDownloadedSize = 0;
         mAlreadyDownloaded = 0;
+        mUserOptions = Main.userOptions;
 
         // Get the file name.
         mFileName = Main.PROGRAM_TEMP_DIR + "." + (new File(mUrl.toExternalForm()).getName()
@@ -119,6 +120,16 @@ public class DownloadThread implements Runnable {
 
         String downloadRange = "bytes=" + mStartByte + "-" + mEndByte;
         conn.setRequestProperty("Range", downloadRange);
+        
+        if (mUserOptions.containsKey("-u") && mUserOptions.containsKey("-p")) {
+            String username = mUserOptions.get("-u");
+            String password = mUserOptions.get("-p");
+            String credentials = username + ":" + password;
+            credentials = Base64.getEncoder().encodeToString(credentials.getBytes());
+
+            conn.setRequestProperty("Authorization", "Basic " + credentials);
+        }
+        
         conn.connect();
 
         // Return the connection.
@@ -185,7 +196,7 @@ public class DownloadThread implements Runnable {
                     mProgress.time += time;
                     mProgress.sizeChange += result;
                     mProgress.percentageCount++;
-                    
+
                     mProgress.updateProgressBar();
                     if (mProgress.percentageCount == 1) {
                         mProgress.time = 0;
