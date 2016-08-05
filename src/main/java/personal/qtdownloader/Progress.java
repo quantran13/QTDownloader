@@ -16,10 +16,8 @@ public class Progress {
     public boolean downloadFinished;
     public boolean joinPartsFinished;
 
-    public long downloadedCount;
-    public long time;
+    private long downloadedCount;
     public long sizeChange;
-    public long percentageCount;
     
     public Instant startDownloadTimeStamp;
 
@@ -29,8 +27,15 @@ public class Progress {
         downloadFinished = false;
         joinPartsFinished = false;
         downloadedCount = 0;
-        time = 0;
         sizeChange = 0;
+    }
+    
+    public long getDownloadedSize() {
+        return downloadedCount;
+    }
+    
+    public void updateDownloadedSize(long downloadedSize) {
+        downloadedCount += downloadedSize;
     }
 
     public void updateProgressBar() {

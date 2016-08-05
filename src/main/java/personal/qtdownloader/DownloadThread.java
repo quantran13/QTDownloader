@@ -28,18 +28,18 @@ import java.util.HashMap;
 public class DownloadThread implements Runnable {
 
     private Thread mThread;
-    private long mStartByte;
-    private long mEndByte;
-    private long mPartSize;
-    private final boolean mResume;
-    private int mPart;
-    private URL mUrl;
-    private long mDownloadedSize;
-    private long mAlreadyDownloaded;
+    private long startByte;
+    private long endByte;
+    private long partSize;
+    private final boolean resume;
+    private int partNumber;
+    private URL url;
+    private long downloadedSize;
+    private long alreadyDownloadedSize;
 
     private final String mFileName;
-    private final Progress mProgress;
-    private final HashMap<String, String> mUserOptions;
+    private final Download currentDownload;
+    private final HashMap<String, String> userOptions;
 
     /**
      * Construct a download object with the given URL and byte range to downloads
@@ -49,41 +49,41 @@ public class DownloadThread implements Runnable {
      * @param endByte The end byte.
      * @param partSize The size of the part needed to be downloaded.
      * @param part The part of the file being downloaded.
-     * @param progress
+     * @param download
      * @param resume Whether to resume the download or not.
      */
     public DownloadThread(URL url, long startByte, long endByte, long partSize,
-            int part, Progress progress, boolean resume) {
+            int part, Download download, boolean resume) {
         if (startByte >= endByte) {
             throw new RuntimeException("The start byte cannot be larger than "
                     + "the end byte!");
         }
 
-        mStartByte = startByte;
-        mEndByte = endByte;
-        mPartSize = partSize;
-        mResume = resume;
-        mUrl = url;
-        mPart = part;
-        mDownloadedSize = 0;
-        mAlreadyDownloaded = 0;
-        mUserOptions = Main.userOptions;
+        this.startByte = startByte;
+        this.endByte = endByte;
+        this.partSize = partSize;
+        this.resume = resume;
+        this.url = url;
+        this.partNumber = part;
+        downloadedSize = 0;
+        alreadyDownloadedSize = 0;
+        userOptions = Main.userOptions;
 
         // Get the file name.
-        mFileName = Main.PROGRAM_TEMP_DIR + "." + (new File(mUrl.toExternalForm()).getName()
-                + ".part" + mPart);
+        mFileName = Main.PROGRAM_TEMP_DIR + "." + (new File(url.toExternalForm()).getName()
+                + ".part" + partNumber);
 
         // Initialize the thread
         mThread = new Thread(this, "Part #" + part);
 
-        mProgress = progress;
+        currentDownload = download;
 
         // If resume a download then set the start byte
-        if (mResume) {
+        if (resume) {
             try (RandomAccessFile partFile = new RandomAccessFile(mFileName, "rw")) {
-                mAlreadyDownloaded = partFile.length();
-                mStartByte += mAlreadyDownloaded;
-                mDownloadedSize += mAlreadyDownloaded;
+                alreadyDownloadedSize = partFile.length();
+                this.startByte += alreadyDownloadedSize;
+                downloadedSize += alreadyDownloadedSize;
             } catch (IOException ex) {
                 // If cannot open the part file, leave the start byte as it is
                 // to download the entire part again.
@@ -116,20 +116,20 @@ public class DownloadThread implements Runnable {
      */
     public HttpURLConnection getHttpConnection() throws IOException {
         // Connect to the URL
-        HttpURLConnection conn = (HttpURLConnection) mUrl.openConnection();
+        HttpURLConnection conn = (HttpURLConnection) url.openConnection();
 
-        String downloadRange = "bytes=" + mStartByte + "-" + mEndByte;
+        String downloadRange = "bytes=" + startByte + "-" + endByte;
         conn.setRequestProperty("Range", downloadRange);
-        
-        if (mUserOptions.containsKey("-u") && mUserOptions.containsKey("-p")) {
-            String username = mUserOptions.get("-u");
-            String password = mUserOptions.get("-p");
+
+        if (userOptions.containsKey("-u") && userOptions.containsKey("-p")) {
+            String username = userOptions.get("-u");
+            String password = userOptions.get("-p");
             String credentials = username + ":" + password;
             credentials = Base64.getEncoder().encodeToString(credentials.getBytes());
 
             conn.setRequestProperty("Authorization", "Basic " + credentials);
         }
-        
+
         conn.connect();
 
         // Return the connection.
@@ -153,7 +153,7 @@ public class DownloadThread implements Runnable {
         try (DataInputStream dataIn = new DataInputStream(is)) {
             // Get the file's length.
             long contentLength = conn.getContentLengthLong();
-            contentLength += mAlreadyDownloaded;
+            contentLength += alreadyDownloadedSize;
 
             // Read a chunk of given size at time and write the actual amount
             // of bytes read to the output file.
@@ -166,45 +166,39 @@ public class DownloadThread implements Runnable {
             // be changed to false, which means the next times the data is 
             // written it is appended to the file.
             boolean overwrite = true;
-            if (mResume) {
+            if (resume) {
                 overwrite = false;
             }
 
-            synchronized (mProgress) {
-                mProgress.downloadedCount += mDownloadedSize;
-                mProgress.notifyAll();
+            synchronized (currentDownload.mProgress) {
+                currentDownload.mProgress.updateDownloadedSize(downloadedSize);
+                currentDownload.mProgress.notifyAll();
             }
 
             // While the total downloaded size is still smaller than the 
             // content length from the connection, keep reading data.
-            while (mDownloadedSize < contentLength) {
-                Instant start = mProgress.startDownloadTimeStamp;
+            while (downloadedSize < contentLength) {
+//                Instant start = mProgress.startDownloadTimeStamp;
                 result = dataIn.read(dataArray, 0, chunkSize);
-                Instant stop = Instant.now();
-                long time = Duration.between(stop, start).getNano();
+//                Instant stop = Instant.now();
+//                long time = Duration.between(stop, start).getNano();
 
                 if (result == -1) {
                     break;
                 }
 
-                mDownloadedSize += result;
+                downloadedSize += result;
                 writeToFile(dataArray, result, overwrite);
                 overwrite = false;
 
-                synchronized (mProgress) {
-                    mProgress.downloadedCount += result;
-                    mProgress.time += time;
-                    mProgress.sizeChange += result;
-                    mProgress.percentageCount++;
+                synchronized (currentDownload.mProgress) {
+                    currentDownload.mProgress.downloadedCount += result;
+                    currentDownload.mProgress.sizeChange += result;
+                    
+                    //currentDownload.mProgress.updateProgressBar();
+                    currentDownload.mProgress.sizeChange = 0;
 
-                    mProgress.updateProgressBar();
-                    if (mProgress.percentageCount == 1) {
-                        mProgress.time = 0;
-                        mProgress.sizeChange = 0;
-                        mProgress.percentageCount = 0;
-                    }
-
-                    mProgress.notifyAll();
+                    currentDownload.mProgress.notifyAll();
                 }
             }
         }
@@ -218,7 +212,8 @@ public class DownloadThread implements Runnable {
      * @param overwrite True if the file is to be overwritten by the given data.
      * @throws IOException if failed to write to file.
      */
-    public void writeToFile(byte[] bytes, int bytesToWrite, boolean overwrite) throws IOException {
+    public void writeToFile(byte[] bytes, int bytesToWrite, boolean overwrite) 
+            throws IOException {
         try (FileOutputStream fout = new FileOutputStream(mFileName, !overwrite)) {
             // Write to the output file using FileChannel.
             FileChannel outChannel = fout.getChannel();
@@ -237,7 +232,7 @@ public class DownloadThread implements Runnable {
      * @return The downloaded size.
      */
     public long getDownloadedSize() {
-        return mDownloadedSize;
+        return downloadedSize;
     }
 
     /**
@@ -246,7 +241,7 @@ public class DownloadThread implements Runnable {
      * @return The size of the current part needed to be downloaded.
      */
     public long getPartSize() {
-        return mPartSize;
+        return partSize;
     }
 
     @Override
@@ -258,9 +253,9 @@ public class DownloadThread implements Runnable {
             // Download to file
             downloadToFile(conn);
         } catch (IOException ex) {
-            synchronized (mProgress) {
-                mProgress.ex = ex;
-                mProgress.notifyAll();
+            synchronized (currentDownload.mProgress) {
+                currentDownload.mProgress.ex = ex;
+                currentDownload.mProgress.notifyAll();
             }
         }
     }

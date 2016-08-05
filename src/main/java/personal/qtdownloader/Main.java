@@ -22,9 +22,12 @@ import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.Map;
 import java.util.Scanner;
 import java.util.Set;
@@ -52,6 +55,8 @@ public class Main {
         cmdLineOptions.put("--username", "HTTP authorization username");
         cmdLineOptions.put("-p", "HTTP authorization password");
         cmdLineOptions.put("--password", "HTTP authorization password");
+//        cmdLineOptions.put("--proxy-username", "Username for proxy");
+//        cmdLineOptions.put("--proxy-password", "Password for proxy");
 
         String programDir = System.getenv("HOME") + "/.QTDownloader";
         String programTmpDir = programDir + "/tmp/";
@@ -91,7 +96,7 @@ public class Main {
      */
     public static void main(String[] args) throws InterruptedException {
         if (args.length == 0) {
-            printUsage(args);
+            printUsage();
             System.exit(0);
         }
 
@@ -152,88 +157,12 @@ public class Main {
         } catch (IOException ex) {
             printErrorMessage(ex);
         }
-
-        // Create a Progress object to keep track of the download
-        Progress progress = new Progress();
-
+        
         // Start new download with the given URL
-        DateFormat dateFormat = new SimpleDateFormat("dd-MM-yyyy HH:mm:ss");
-        Date date = new Date();
-        System.out.println("--- " + dateFormat.format(date) + " ---\n");
-        System.out.println("Downloading from: " + mURL);
-
-        Download newDownload = new Download(mURL, partsCount, progress);
+        Download newDownload = new Download(mURL, partsCount);
 
         // Start the download.
-        Instant start = Instant.now();
         newDownload.startThread();
-
-        // Verify URL
-        System.out.println("Sending HTTP request...");
-        synchronized (progress) {
-            // Wait until verification of the URL succeeds or an exception is thrown.
-            while (progress.mURLVerifyResult.responseCode == 0
-                    && progress.ex == null) {
-                progress.wait();
-            }
-
-            if (progress.ex == null) {
-                // If no exception was thrown, URL verification succeeds.
-                System.out.println("Response code: "
-                        + progress.mURLVerifyResult.responseCode);
-                System.out.println("Fize size: "
-                        + Utility.readableFileSize(progress.mURLVerifyResult.contentLength));
-            } else {
-                // Else print the error message and exit.
-                printErrorMessage(progress.ex);
-            }
-        }
-
-        System.out.println();
-
-        // Wait for the download to finish
-        Instant downloadFinish = null;
-
-        synchronized (progress) {
-            // Wait until the download finishes or an exception is thrown.
-            while (!progress.downloadFinished && progress.ex == null) {
-                progress.wait();
-            }
-
-            if (progress.ex == null) {
-                // If no exception was thrown. the file was downloaded successfully.
-                downloadFinish = Instant.now();
-                double downloadTime = ((double) (Duration.between(start,
-                        downloadFinish).toMillis())) / 1000;
-
-                System.out.println("\n\nTotal download time: " + downloadTime);
-            } else {
-                // Else print the error message and exit.
-                printErrorMessage(progress.ex);
-            }
-        }
-
-        // Wait for the parts to finish joining.
-        Instant joinFinishedTime;
-
-        synchronized (progress) {
-            // Wait until all parts finish joining or an exception is thrown.
-            while (!progress.joinPartsFinished && progress.ex == null) {
-                progress.wait();
-            }
-
-            if (progress.ex == null) {
-                // If no exception is thrown, parts joining succeeds.
-                joinFinishedTime = Instant.now();
-                double joinTime = ((double) (Duration.between(downloadFinish,
-                        joinFinishedTime).toMillis())) / 1000;
-
-                System.out.println("Total join time: " + joinTime);
-            } else {
-                // Else print the error message and exit.
-                printErrorMessage(progress.ex);
-            }
-        }
 
         // Wait for the main download thread to end.
         try {
@@ -243,7 +172,7 @@ public class Main {
         }
 
         // Save the download to the downloaded file list
-        currentDownloadSession.setDownloadSize(progress.downloadedCount);
+        currentDownloadSession.setDownloadSize(newDownload.getDownloadedSize());
         try {
             writeInfo(downloadSessionList);
         } catch (IOException ex) {
@@ -251,7 +180,8 @@ public class Main {
         }
 
         // Print the current time
-        date = new Date();
+        DateFormat dateFormat = new SimpleDateFormat("dd-MM-yyyy HH:mm:ss");
+        Date date = new Date();
         System.out.println("Finished downloading!");
         System.out.println("\n--- " + dateFormat.format(date) + " ---");
     }
@@ -264,7 +194,7 @@ public class Main {
     private static HashMap<String, String> readArgumentOptions(String[] args)
             throws RuntimeException {
         Set<String> validOptions = cmdLineOptions.keySet();
-        HashMap<String, String> userOptions = new HashMap<>();
+        HashMap<String, String> usrOptions = new HashMap<>();
 
         for (int i = 0; i < args.length; i++) {
             String arg = args[i];
@@ -302,7 +232,7 @@ public class Main {
                             optionValue = optionValue + "/";
                         }
 
-                        userOptions.put("-o", optionValue);
+                        usrOptions.put("-o", optionValue);
                         i++;
                         break;
                     }
@@ -311,7 +241,7 @@ public class Main {
                          * -f: Output file name.
                          */
 
-                        userOptions.put("-f", optionValue);
+                        usrOptions.put("-f", optionValue);
                         i++;
                         break;
                     }
@@ -321,7 +251,7 @@ public class Main {
                          * -u or --username: Http username.
                          */
 
-                        userOptions.put("-u", optionValue);
+                        usrOptions.put("-u", optionValue);
                         i++;
                         break;
                     }
@@ -331,7 +261,7 @@ public class Main {
                          * -p or --password: Http password;
                          */
 
-                        userOptions.put("-p", optionValue);
+                        usrOptions.put("-p", optionValue);
                         i++;
                         break;
                     }
@@ -340,7 +270,7 @@ public class Main {
                         /*
                          * Print the usage then exit.
                          */
-                        printUsage(args);
+                        printUsage();
                         System.exit(0);
                     }
                     default:
@@ -364,18 +294,22 @@ public class Main {
             }
         }
 
-        return userOptions;
+        return usrOptions;
     }
 
     /**
      * Print the usage.
      */
-    private static void printUsage(String[] args) {
+    private static void printUsage() {
         System.err.println("\nUsage: java -jar qtdownloader.jar [OPTIONS] URL");
         System.err.println("\nOptions: ");
 
-        cmdLineOptions.keySet().stream().forEach((option) -> {
-            System.err.println(option + ": " + cmdLineOptions.get(option));
+        ArrayList<String> validOptions = new ArrayList<>(cmdLineOptions.keySet());
+        Collections.sort(validOptions);
+
+        validOptions.stream().forEach((String option) -> {
+            System.err.println(String.format("\t%-20s: %s", option,
+                    cmdLineOptions.get(option)));
         });
 
         System.err.println();
@@ -412,7 +346,7 @@ public class Main {
          * Exit the program.
          */
         System.err.println("\nExiting!");
-        System.exit(0);
+        System.exit(1);
     }
 
     /**
@@ -422,7 +356,8 @@ public class Main {
      *
      * @throws IOException If failed to open the downloaded file list.
      */
-    private static HashMap<String, DownloadSession> getListOfDownloadedFiles() throws IOException {
+    private static HashMap<String, DownloadSession> getListOfDownloadedFiles()
+            throws IOException {
         // The download files list is store in a hashmap, with the url being the key.
         HashMap<String, DownloadSession> downloadedList = new HashMap<>();
 
@@ -541,12 +476,36 @@ public class Main {
     }
 
     /**
+     *
+     * @param progress
+     * @param condition
+     * @param handler
+     */
+    private static void synchronizeProgress(Progress progress, boolean condition,
+            ProgressHandler handler) throws InterruptedException {
+        synchronized (progress) {
+            while (condition && progress.ex == null) {
+                progress.wait();
+            }
+
+            if (progress.ex == null) {
+                // If no exception occured then handle the http result.
+                handler.handle(progress.mURLVerifyResult);
+            } else {
+                // Else print the error message
+                printErrorMessage(progress.ex);
+            }
+        }
+    }
+
+    /**
      * Write the list of downloaded files and URLs to file.
      *
      * @param sessionList List of downloaded files and URLs.
      * @throws IOException
      */
-    private static void writeInfo(HashMap<String, DownloadSession> sessionList) throws IOException {
+    private static void writeInfo(HashMap<String, DownloadSession> sessionList)
+            throws IOException {
         try (FileWriter tmpFile = new FileWriter(DOWNLOADED_LIST_FILENAME, false);
                 BufferedWriter wr = new BufferedWriter(tmpFile)) {
             for (Map.Entry<String, DownloadSession> entry : sessionList.entrySet()) {
