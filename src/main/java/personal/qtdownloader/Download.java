@@ -26,8 +26,6 @@ import java.util.Arrays;
 import java.util.Base64;
 import java.util.Date;
 import java.util.HashMap;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 import static personal.qtdownloader.Main.mURL;
 
 /**
@@ -36,15 +34,15 @@ import static personal.qtdownloader.Main.mURL;
  */
 public class Download implements Runnable {
 
-    private final String mUrl;
-    private final int mPartsCount;
-    protected final Progress mProgress;
+    private final String url;
+    private final int partsCount;
+    protected final Progress progress;
     private final boolean mResume;
-    private final String mOutputDirectory;
-    private final String mFileName;
-    private final String mOriginalFileName;
-    private final String[] mPartNameLists;
-    private final HashMap<String, String> mUserOptions;
+    private final String outputDirectory;
+    private final String fileName;
+    private final String originalFileName;
+    private final String[] partNamesLists;
+    private final HashMap<String, String> userOptions;
 
     private final Thread mThread;
 
@@ -53,31 +51,31 @@ public class Download implements Runnable {
      *
      * @param urlString
      * @param partsCount
-     * @param progress
      */
     public Download(String urlString, int partsCount) {
-        mUrl = urlString;
-        mPartsCount = partsCount;
-        mProgress = new Progress();
-        mUserOptions = Main.userOptions;
+        this.url = urlString;
+        this.partsCount = partsCount;
+        this.progress = new Progress();
+        this.userOptions = Main.userOptions;
         
         // Get the user option for whether to resume downloading or not.
-        mResume = "y".equals(mUserOptions.get("resume"));
+        this.mResume = "y".equals(userOptions.get("resume"));
 
         // Get the output directory, which is either specified by the user
         // or the current directory by default
-        String outputDir = mUserOptions.get("-o");
-        mOutputDirectory = (mUserOptions.containsKey("-o")) ? outputDir : "./";
+        String outputDir = userOptions.get("-o");
+        this.outputDirectory = (userOptions.containsKey("-o")) ? outputDir : "./";
 
         // Get the file name from either the user's option or the file's default name
-        String fileName = mUserOptions.get("-f");
-        mFileName = (mUserOptions.containsKey("-f")) ? fileName : (new File(mUrl).getName());
-        mOriginalFileName = new File(mUrl).getName();
+        String usrFileName = userOptions.get("-f");
+        this.fileName = (userOptions.containsKey("-f")) ? 
+                usrFileName : (new File(url).getName());
+        this.originalFileName = new File(url).getName();
 
         // Generate the list of part files' names.
-        mPartNameLists = new String[partsCount];
+        this.partNamesLists = new String[partsCount];
         for (int i = 0; i < partsCount; i++) {
-            mPartNameLists[i] = Main.PROGRAM_TEMP_DIR + "." + mOriginalFileName
+            partNamesLists[i] = Main.PROGRAM_TEMP_DIR + "." + originalFileName
                     + ".part" + (i + 1);
         }
 
@@ -101,9 +99,9 @@ public class Download implements Runnable {
             // Connect to the created connection.
             conn.setRequestMethod("HEAD");
 
-            if (mUserOptions.containsKey("-u") && mUserOptions.containsKey("-p")) {
-                String username = mUserOptions.get("-u");
-                String password = mUserOptions.get("-p");
+            if (userOptions.containsKey("-u") && userOptions.containsKey("-p")) {
+                String username = userOptions.get("-u");
+                String password = userOptions.get("-p");
                 String credentials = username + ":" + password;
                 credentials = Base64.getEncoder().encodeToString(credentials.getBytes());
 
@@ -135,7 +133,7 @@ public class Download implements Runnable {
      *
      * @return An ArrayList of downloading thread objects.
      */
-    public ArrayList<DownloadThread> startDownloadThreads(URL url, long contentSize,
+    private ArrayList<DownloadThread> startDownloadThreads(URL url, long contentSize,
             int partCount, Progress progress) {
         long partSize = contentSize / partCount;
         ArrayList<DownloadThread> downloadThreadsList = new ArrayList<>(partCount);
@@ -170,16 +168,16 @@ public class Download implements Runnable {
      *
      * @throws java.io.IOException if failed to open the output file.
      */
-    public void joinDownloadedParts(String fileName, ArrayList<DownloadThread> downloadParts)
+    private void joinDownloadedParts(String fileName, ArrayList<DownloadThread> downloadParts)
             throws IOException {
-        String outputFile = mOutputDirectory + fileName;
+        String outputFile = outputDirectory + fileName;
 
         try (RandomAccessFile mainFile = new RandomAccessFile(outputFile, "rw")) {
             FileChannel mainChannel = mainFile.getChannel();
             long startPosition = 0;
 
             for (int i = 0; i < downloadParts.size(); i++) {
-                String partName = mPartNameLists[i];
+                String partName = partNamesLists[i];
 
                 try (RandomAccessFile partFile = new RandomAccessFile(partName, "rw")) {
                     long partSize = downloadParts.get(i).getDownloadedSize();
@@ -198,26 +196,6 @@ public class Download implements Runnable {
                 }
             }
         }
-    }
-
-    /**
-     * Start the thread.
-     */
-    public void startThread() {
-        mThread.start();
-    }
-
-    /**
-     * Join the thread.
-     *
-     * @throws InterruptedException if the thread is interrupted.
-     */
-    public void joinThread() throws InterruptedException {
-        mThread.join();
-    }
-    
-    public long getDownloadedSize() {
-        return mProgress.getDownloadedSize();
     }
     
     /**
@@ -255,22 +233,46 @@ public class Download implements Runnable {
     }
 
     /**
+     * Start the thread.
+     */
+    public void startThread() {
+        mThread.start();
+    }
+
+    /**
+     * Join the thread.
+     *
+     * @throws InterruptedException if the thread is interrupted.
+     */
+    public void joinThread() throws InterruptedException {
+        mThread.join();
+    }
+    
+    /**
+     * Get the size of the downloaded part.
+     * 
+     * @return The size of the downloaded part.
+     */
+    public long getDownloadedSize() {
+        return progress.getDownloadedSize();
+    }
+
+    /**
      * Start downloading from the given URL.
      */
     @Override
-    public void run() {
+    public void run()   {
         // Start the download
         DateFormat dateFormat = new SimpleDateFormat("dd-MM-yyyy HH:mm:ss");
         Date date = new Date();
         System.out.println("--- " + dateFormat.format(date) + " ---\n");
         System.out.println("Downloading from: " + mURL);
         
-        // Get the file name and create the URL object
-        String fileName = mFileName;
-        URL url = null;
+        // Create the URL object
+        URL downloadURL = null;
         
         try {
-            url = new URL(mUrl);
+            downloadURL = new URL(url);
         } catch (MalformedURLException ex) {
             printErrorMessage(ex);
         }
@@ -280,7 +282,7 @@ public class Download implements Runnable {
         
         HttpResult result = null;
         try {
-            result = checkURLValidity(url);
+            result = checkURLValidity(downloadURL);
         } catch (ConnectException ex) {
             printErrorMessage(ex);
         }
@@ -298,15 +300,17 @@ public class Download implements Runnable {
         System.out.println("Response code: " + result.responseCode);
         System.out.println("Fize size: "
                 + Utility.readableFileSize(result.contentLength));
+        System.out.println();
 
         // Start the threads to download.
         ArrayList<DownloadThread> downloadParts;
 
-        mProgress.startDownloadTimeStamp = Instant.now();
         Instant start = Instant.now();
+        progress.setStartDownloadTime(start);
+        progress.setUrlVerifyResult(result);
 
-        downloadParts = startDownloadThreads(url, contentSize,
-                    mPartsCount, mProgress);
+        downloadParts = startDownloadThreads(downloadURL, contentSize,
+                    partsCount, progress);
 
         // Wait for the threads to finish downloading
         for (int i = 0; i < downloadParts.size(); i++) {
@@ -342,7 +346,7 @@ public class Download implements Runnable {
         // Delete part files
         try {
             for (int i = 0; i < downloadParts.size(); i++) {
-                String partName = mPartNameLists[i];
+                String partName = partNamesLists[i];
                 Path filePath = Paths.get(partName);
                 Files.deleteIfExists(filePath);
             }

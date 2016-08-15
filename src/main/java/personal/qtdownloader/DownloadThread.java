@@ -16,8 +16,6 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
-import java.time.Duration;
-import java.time.Instant;
 import java.util.Base64;
 import java.util.HashMap;
 
@@ -170,15 +168,15 @@ public class DownloadThread implements Runnable {
                 overwrite = false;
             }
 
-            synchronized (currentDownload.mProgress) {
-                currentDownload.mProgress.updateDownloadedSize(downloadedSize);
-                currentDownload.mProgress.notifyAll();
+            synchronized (currentDownload.progress) {
+                currentDownload.progress.updateDownloadedSize(downloadedSize);
+                currentDownload.progress.notifyAll();
             }
 
             // While the total downloaded size is still smaller than the 
             // content length from the connection, keep reading data.
             while (downloadedSize < contentLength) {
-//                Instant start = mProgress.startDownloadTimeStamp;
+//                Instant start = progress.startDownloadTimeStamp;
                 result = dataIn.read(dataArray, 0, chunkSize);
 //                Instant stop = Instant.now();
 //                long time = Duration.between(stop, start).getNano();
@@ -191,14 +189,14 @@ public class DownloadThread implements Runnable {
                 writeToFile(dataArray, result, overwrite);
                 overwrite = false;
 
-                synchronized (currentDownload.mProgress) {
-                    currentDownload.mProgress.downloadedCount += result;
-                    currentDownload.mProgress.sizeChange += result;
+                synchronized (currentDownload.progress) {
+                    currentDownload.progress.updateDownloadedSize(result);
+                    currentDownload.progress.setSizeChange(result);
                     
-                    //currentDownload.mProgress.updateProgressBar();
-                    currentDownload.mProgress.sizeChange = 0;
+                    currentDownload.progress.updateProgressBar();
+                    currentDownload.progress.setSizeChange(0);
 
-                    currentDownload.mProgress.notifyAll();
+                    currentDownload.progress.notifyAll();
                 }
             }
         }
@@ -253,9 +251,9 @@ public class DownloadThread implements Runnable {
             // Download to file
             downloadToFile(conn);
         } catch (IOException ex) {
-            synchronized (currentDownload.mProgress) {
-                currentDownload.mProgress.ex = ex;
-                currentDownload.mProgress.notifyAll();
+            synchronized (currentDownload.progress) {
+                currentDownload.progress.setException(ex);
+                currentDownload.progress.notifyAll();
             }
         }
     }

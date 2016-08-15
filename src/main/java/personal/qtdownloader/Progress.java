@@ -6,26 +6,19 @@
  */
 package personal.qtdownloader;
 
-import java.time.Duration;
 import java.time.Instant;
 
 public class Progress {
 
-    public HttpResult mURLVerifyResult;
-    public Exception ex;
-    public boolean downloadFinished;
-    public boolean joinPartsFinished;
-
+    private HttpResult mURLVerifyResult;
+    private Exception ex;
     private long downloadedCount;
-    public long sizeChange;
-    
-    public Instant startDownloadTimeStamp;
+    private long sizeChange;
+    private Instant startDownloadTimeStamp;
 
     public Progress() {
         mURLVerifyResult = new HttpResult(0, -1);
         ex = null;
-        downloadFinished = false;
-        joinPartsFinished = false;
         downloadedCount = 0;
         sizeChange = 0;
     }
@@ -36,6 +29,22 @@ public class Progress {
     
     public void updateDownloadedSize(long downloadedSize) {
         downloadedCount += downloadedSize;
+    }
+    
+    public void setUrlVerifyResult(HttpResult result) {
+        mURLVerifyResult = result;
+    }
+    
+    public void setException(Exception ex) {
+        this.ex = ex;
+    }
+    
+    public void setStartDownloadTime(Instant start) {
+        startDownloadTimeStamp = start;
+    }
+    
+    public void setSizeChange(long sizeChange) {
+        this.sizeChange = sizeChange;
     }
 
     public void updateProgressBar() {
@@ -49,6 +58,7 @@ public class Progress {
 //        Instant now = Instant.now();
 //        long timeElapsed = Duration.between(now, startDownloadTimeStamp).getNano();
 //        double time = (double)timeElapsed;
+
         double speed = 0;
 //        if (time != 0)
 //            speed = (double) ((double)downloadedCount * (time / 1000000000));

@@ -122,7 +122,8 @@ public class Main {
         // Check if the file has been downloaded or not
         String fileName = new File(mURL).getName();
         DownloadSession currentDownloadSession;
-        currentDownloadSession = checkIfFileWasDownloaded(downloadSessionList, fileName, mURL);
+        currentDownloadSession = checkIfFileWasDownloaded(downloadSessionList, 
+                fileName, mURL);
 
         // If the file was downloaded before.
         boolean downloaded = currentDownloadSession.alreadyDownloaded;
@@ -473,29 +474,6 @@ public class Main {
         }
 
         return downloadSession;
-    }
-
-    /**
-     *
-     * @param progress
-     * @param condition
-     * @param handler
-     */
-    private static void synchronizeProgress(Progress progress, boolean condition,
-            ProgressHandler handler) throws InterruptedException {
-        synchronized (progress) {
-            while (condition && progress.ex == null) {
-                progress.wait();
-            }
-
-            if (progress.ex == null) {
-                // If no exception occured then handle the http result.
-                handler.handle(progress.mURLVerifyResult);
-            } else {
-                // Else print the error message
-                printErrorMessage(progress.ex);
-            }
-        }
     }
 
     /**
