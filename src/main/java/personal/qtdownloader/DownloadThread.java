@@ -148,7 +148,7 @@ public class DownloadThread implements Runnable {
         // output file at a time.
         int chunkSize = (int) Math.pow(2, 13); // 8KB
 
-        try (DataInputStream dataIn = new DataInputStream(is)) {
+        try (DataInputStream dataStream = new DataInputStream(is)) {
             // Get the file's length.
             long contentLength = conn.getContentLengthLong();
             contentLength += alreadyDownloadedSize;
@@ -177,7 +177,7 @@ public class DownloadThread implements Runnable {
             // content length from the connection, keep reading data.
             while (downloadedSize < contentLength) {
 //                Instant start = progress.startDownloadTimeStamp;
-                result = dataIn.read(dataArray, 0, chunkSize);
+                result = dataStream.read(dataArray, 0, chunkSize);
 //                Instant stop = Instant.now();
 //                long time = Duration.between(stop, start).getNano();
 
@@ -192,7 +192,6 @@ public class DownloadThread implements Runnable {
                 synchronized (currentDownload.progress) {
                     currentDownload.progress.updateDownloadedSize(result);
                     currentDownload.progress.setSizeChange(result);
-                    
                     currentDownload.progress.updateProgressBar();
                     currentDownload.progress.setSizeChange(0);
 
