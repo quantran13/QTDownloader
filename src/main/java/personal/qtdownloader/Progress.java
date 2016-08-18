@@ -23,6 +23,10 @@ public class Progress {
         sizeChange = 0;
     }
     
+    public long getContentSize() {
+        return mURLVerifyResult.contentLength;
+    }
+    
     public long getDownloadedSize() {
         return downloadedCount;
     }

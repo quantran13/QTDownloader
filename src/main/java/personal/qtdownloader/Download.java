@@ -26,6 +26,8 @@ import java.util.Arrays;
 import java.util.Base64;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import static personal.qtdownloader.Main.mURL;
 
 /**
@@ -43,8 +45,9 @@ public class Download implements Runnable {
     private final String originalFileName;
     private final String[] partNamesLists;
     private final HashMap<String, String> userOptions;
-
     private final Thread mThread;
+    
+    private URL downloadUrl;
 
     /**
      * Constructor for the Download class which takes an URL string as parameter
@@ -54,6 +57,7 @@ public class Download implements Runnable {
      */
     public Download(String urlString, int partsCount) {
         this.url = urlString;
+        this.downloadUrl = null;
         this.partsCount = partsCount;
         this.progress = new Progress();
         this.userOptions = Main.userOptions;
@@ -133,26 +137,12 @@ public class Download implements Runnable {
      *
      * @return An ArrayList of downloading thread objects.
      */
-    private ArrayList<DownloadThread> startDownloadThreads(URL url, long contentSize,
-            int partCount, Progress progress) {
-        long partSize = contentSize / partCount;
+    private ArrayList<DownloadThread> startDownloadThreads(int partCount) {
         ArrayList<DownloadThread> downloadThreadsList = new ArrayList<>(partCount);
 
         for (int i = 0; i < partCount; i++) {
-            // Calculate the begin and end byte for each part.
-            long beginByte = i * partSize;
-            long endByte;
-            if (i == partCount - 1) {
-                endByte = contentSize - 1;
-            } else {
-                endByte = (i + 1) * partSize - 1;
-            }
-
-            long currentPartSize = endByte - beginByte + 1;
-
             // Create new download threads and start them.
-            DownloadThread downloadThread = new DownloadThread(url, beginByte,
-                    endByte, currentPartSize, i + 1, this, mResume);
+            DownloadThread downloadThread = new DownloadThread(i + 1, this);
             downloadThreadsList.add(downloadThread);
             downloadThreadsList.get(i).startDownload();
         }
@@ -256,6 +246,33 @@ public class Download implements Runnable {
     public long getDownloadedSize() {
         return progress.getDownloadedSize();
     }
+    
+    /**
+     * Get the download URL.
+     * 
+     * @return The download URL.
+     */
+    public URL getDownloadURL() {
+        return downloadUrl;
+    }
+    
+    /**
+     * Returns whether to resume the interrupted download or not.
+     * 
+     * @return Whether to resume the interrupted download or not.
+     */
+    public boolean resumeDownload() {
+        return mResume;
+    }
+    
+    /**
+     * Get the number of parts to split the file into to download.
+     * 
+     * @return The number of parts.
+     */
+    public int getPartCount() {
+        return partsCount;
+    }
 
     /**
      * Start downloading from the given URL.
@@ -269,10 +286,8 @@ public class Download implements Runnable {
         System.out.println("Downloading from: " + mURL);
         
         // Create the URL object
-        URL downloadURL = null;
-        
         try {
-            downloadURL = new URL(url);
+            downloadUrl = new URL(url);
         } catch (MalformedURLException ex) {
             printErrorMessage(ex);
         }
@@ -282,7 +297,7 @@ public class Download implements Runnable {
         
         HttpResult result = null;
         try {
-            result = checkURLValidity(downloadURL);
+            result = checkURLValidity(downloadUrl);
         } catch (ConnectException ex) {
             printErrorMessage(ex);
         }
@@ -309,17 +324,16 @@ public class Download implements Runnable {
         progress.setStartDownloadTime(start);
         progress.setUrlVerifyResult(result);
 
-        downloadParts = startDownloadThreads(downloadURL, contentSize,
-                    partsCount, progress);
+        downloadParts = startDownloadThreads(partsCount);
 
         // Wait for the threads to finish downloading
         for (int i = 0; i < downloadParts.size(); i++) {
             DownloadThread currentThread = downloadParts.get(i);
             
             try {
-                currentThread.joinThread();
-            } catch (InterruptedException ex) {
-                printErrorMessage(ex);
+                    currentThread.joinThread();
+                } catch (InterruptedException ex) {
+                    printErrorMessage(ex);
             }
             
             if (currentThread.getDownloadedSize() != currentThread.getPartSize()) {
@@ -343,17 +357,14 @@ public class Download implements Runnable {
             printErrorMessage(ex);
         }
 
-        // Delete part files
-        try {
-            for (int i = 0; i < downloadParts.size(); i++) {
-                String partName = partNamesLists[i];
-                Path filePath = Paths.get(partName);
+        for (int i = 0; i < downloadParts.size(); i++) {
+            String partName = partNamesLists[i];
+            Path filePath = Paths.get(partName);
+            try {
                 Files.deleteIfExists(filePath);
+            } catch (IOException ex) {
+                // TODO log error if failed to delete part files.
             }
-        } catch (IOException ex) {
-            // If failed to delete then just ignore the exception.
-            // What can we do?
-            // TODO Log the error
         }
         
         Instant joinFinishedTime = Instant.now();

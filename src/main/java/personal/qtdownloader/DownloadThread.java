@@ -30,7 +30,6 @@ public class DownloadThread implements Runnable {
     private long endByte;
     private long partSize;
     private final boolean resume;
-    private int partNumber;
     private URL url;
     private long downloadedSize;
     private long alreadyDownloadedSize;
@@ -46,23 +45,25 @@ public class DownloadThread implements Runnable {
      * @param startByte The starting byte.
      * @param endByte The end byte.
      * @param partSize The size of the part needed to be downloaded.
-     * @param part The part of the file being downloaded.
+     * @param partNumber The part of the file being downloaded.
      * @param download
      * @param resume Whether to resume the download or not.
      */
-    public DownloadThread(URL url, long startByte, long endByte, long partSize,
-            int part, Download download, boolean resume) {
-        if (startByte >= endByte) {
-            throw new RuntimeException("The start byte cannot be larger than "
-                    + "the end byte!");
-        }
-
-        this.startByte = startByte;
-        this.endByte = endByte;
-        this.partSize = partSize;
-        this.resume = resume;
-        this.url = url;
-        this.partNumber = part;
+    public DownloadThread(int partNumber, Download download) {
+        // Calculate the start byte and end byte
+        partSize = download.progress.getContentSize() / download.getPartCount();
+        long start_byte = (partNumber - 1) * partSize;
+        long end_byte;
+        if (partNumber == download.getPartCount())
+            end_byte = download.progress.getContentSize() - 1;
+        else
+            end_byte = partNumber * partSize - 1;
+        
+        this.startByte = start_byte;
+        this.endByte = end_byte;
+        this.partSize = end_byte - start_byte + 1;
+        this.resume = download.resumeDownload();
+        this.url = download.getDownloadURL();
         downloadedSize = 0;
         alreadyDownloadedSize = 0;
         userOptions = Main.userOptions;
@@ -72,7 +73,7 @@ public class DownloadThread implements Runnable {
                 + ".part" + partNumber);
 
         // Initialize the thread
-        mThread = new Thread(this, "Part #" + part);
+        mThread = new Thread(this, "Part #" + partNumber);
 
         currentDownload = download;
 
@@ -229,7 +230,7 @@ public class DownloadThread implements Runnable {
      * @return The downloaded size.
      */
     public long getDownloadedSize() {
-        return downloadedSize;
+        return partSize;
     }
 
     /**
