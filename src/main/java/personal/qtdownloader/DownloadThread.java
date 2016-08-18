@@ -41,13 +41,8 @@ public class DownloadThread implements Runnable {
     /**
      * Construct a download object with the given URL and byte range to downloads
      *
-     * @param url The URL to download from.
-     * @param startByte The starting byte.
-     * @param endByte The end byte.
-     * @param partSize The size of the part needed to be downloaded.
      * @param partNumber The part of the file being downloaded.
-     * @param download
-     * @param resume Whether to resume the download or not.
+     * @param download The main download thread.
      */
     public DownloadThread(int partNumber, Download download) {
         // Calculate the start byte and end byte
