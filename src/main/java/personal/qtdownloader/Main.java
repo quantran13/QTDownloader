@@ -91,7 +91,7 @@ public class Main {
      * @param args Array of arguments.
      * @throws java.lang.InterruptedException
      */
-    public static void main(String[] args) throws InterruptedException {
+    public static void main(String[] args) {
         if (args.length == 0) {
             printUsage();
             System.exit(0);
