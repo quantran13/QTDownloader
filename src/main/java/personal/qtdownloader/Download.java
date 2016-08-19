@@ -220,7 +220,6 @@ public class Download implements Runnable {
             System.err.println("\nOne of the thread was interrupted: "
                     + ex.getMessage());
         } else if (ex instanceof RuntimeException) {
-            System.err.println(Arrays.toString(ex.getStackTrace()));
             System.err.println(ex.getMessage());
         }
 
@@ -376,7 +375,7 @@ public class Download implements Runnable {
         try {
             // Join the downloaded parts
             joinDownloadedParts(fileName, downloadParts);
-        } catch (IOException ex) {
+        } catch (Exception ex) {
             printErrorMessage(ex);
         }
 
