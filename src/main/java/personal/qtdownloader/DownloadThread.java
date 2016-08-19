@@ -86,22 +86,6 @@ public class DownloadThread implements Callable<Long> {
         }
     }
 
-//    /**
-//     * Start the thread to download.
-//     */
-//    public void startDownload() {
-//        mThread.start();
-//    }
-//
-//    /**
-//     * Wait for the thread to finish.
-//     *
-//     * @throws java.lang.InterruptedException If join() failed.
-//     */
-//    public void joinThread() throws InterruptedException {
-//        mThread.join();
-//    }
-
     /**
      * Get the HTTP Connection with the download URL.
      *
