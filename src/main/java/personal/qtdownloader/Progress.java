@@ -11,14 +11,12 @@ import java.time.Instant;
 public class Progress {
 
     private HttpResult mURLVerifyResult;
-    private Exception ex;
     private long downloadedCount;
     private long sizeChange;
     private Instant startDownloadTimeStamp;
 
     public Progress() {
         mURLVerifyResult = new HttpResult(0, -1);
-        ex = null;
         downloadedCount = 0;
         sizeChange = 0;
     }
@@ -37,10 +35,6 @@ public class Progress {
     
     public void setUrlVerifyResult(HttpResult result) {
         mURLVerifyResult = result;
-    }
-    
-    public void setException(Exception ex) {
-        this.ex = ex;
     }
     
     public void setStartDownloadTime(Instant start) {

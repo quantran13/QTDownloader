@@ -26,6 +26,10 @@ import java.util.Arrays;
 import java.util.Base64;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import static personal.qtdownloader.Main.mURL;
 
 /**
@@ -45,6 +49,9 @@ public class Download implements Runnable {
     private final HashMap<String, String> userOptions;
     private final Thread mThread;
     
+    private final ExecutorService downloadThreadsPool;
+    private final Future[] futurePool;
+    
     private URL downloadUrl;
 
     /**
@@ -59,6 +66,8 @@ public class Download implements Runnable {
         this.partsCount = partsCount;
         this.progress = new Progress();
         this.userOptions = Main.userOptions;
+        this.downloadThreadsPool = Executors.newFixedThreadPool(partsCount);
+        this.futurePool = new Future[partsCount];
         
         // Get the user option for whether to resume downloading or not.
         this.mResume = "y".equals(userOptions.get("resume"));
@@ -142,7 +151,9 @@ public class Download implements Runnable {
             // Create new download threads and start them.
             DownloadThread downloadThread = new DownloadThread(i + 1, this);
             downloadThreadsList.add(downloadThread);
-            downloadThreadsList.get(i).startDownload();
+            
+            Future result = downloadThreadsPool.submit(downloadThread);
+            futurePool[i] = result;
         }
 
         return downloadThreadsList;
@@ -271,6 +282,15 @@ public class Download implements Runnable {
     public int getPartCount() {
         return partsCount;
     }
+    
+    public boolean downloadThreadsIsDone() {
+        for (Future task : futurePool) {
+            if (!task.isDone())
+                return false;
+        }
+        
+        return true;
+    }
 
     /**
      * Start downloading from the given URL.
@@ -323,24 +343,29 @@ public class Download implements Runnable {
         progress.setUrlVerifyResult(result);
 
         downloadParts = startDownloadThreads(partsCount);
-
+        
         // Wait for the threads to finish downloading
-        for (int i = 0; i < downloadParts.size(); i++) {
-            DownloadThread currentThread = downloadParts.get(i);
-            
+        while (downloadThreadsIsDone()) {}
+        
+        for (int i = 0; i < futurePool.length; i++) {
             try {
-                    currentThread.joinThread();
-                } catch (InterruptedException ex) {
-                    printErrorMessage(ex);
-            }
-            
-            if (currentThread.getDownloadedSize() != currentThread.getPartSize()) {
-                String errMessage = "Download incompleted at part "
-                        + (i + 1) + ": " + currentThread.getDownloadedSize();
+                Long downloadedBytes = (Long) futurePool[i].get();
+               
+                if (downloadedBytes == 1) {
+                    String errMessage = "Download incompleted at part "
+                        + (i + 1) + "!";
                 
-                printErrorMessage(new RuntimeException(errMessage));
+                    printErrorMessage(new RuntimeException(errMessage));
+                }
+            } catch (ExecutionException ex) {
+                Throwable exception = ex.getCause();
+                printErrorMessage((Exception) exception);
+            } catch (InterruptedException ex) {
+                printErrorMessage(ex);
             }
         }
+        
+        downloadThreadsPool.shutdown();
 
         // Notify that all parts have finished downloading        
         Instant downloadFinish = Instant.now();

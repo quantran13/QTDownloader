@@ -18,14 +18,15 @@ import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.Base64;
 import java.util.HashMap;
+import java.util.concurrent.Callable;
 
 /**
  *
  * @author quan
  */
-public class DownloadThread implements Runnable {
+public class DownloadThread implements Callable<Long> {
 
-    private Thread mThread;
+    //private Thread mThread;
     private long startByte;
     private long endByte;
     private long partSize;
@@ -68,7 +69,7 @@ public class DownloadThread implements Runnable {
                 + ".part" + partNumber);
 
         // Initialize the thread
-        mThread = new Thread(this, "Part #" + partNumber);
+        //mThread = new Thread(this, "Part #" + partNumber);
 
         currentDownload = download;
 
@@ -85,21 +86,21 @@ public class DownloadThread implements Runnable {
         }
     }
 
-    /**
-     * Start the thread to download.
-     */
-    public void startDownload() {
-        mThread.start();
-    }
-
-    /**
-     * Wait for the thread to finish.
-     *
-     * @throws java.lang.InterruptedException If join() failed.
-     */
-    public void joinThread() throws InterruptedException {
-        mThread.join();
-    }
+//    /**
+//     * Start the thread to download.
+//     */
+//    public void startDownload() {
+//        mThread.start();
+//    }
+//
+//    /**
+//     * Wait for the thread to finish.
+//     *
+//     * @throws java.lang.InterruptedException If join() failed.
+//     */
+//    public void joinThread() throws InterruptedException {
+//        mThread.join();
+//    }
 
     /**
      * Get the HTTP Connection with the download URL.
@@ -225,7 +226,7 @@ public class DownloadThread implements Runnable {
      * @return The downloaded size.
      */
     public long getDownloadedSize() {
-        return partSize;
+        return downloadedSize;
     }
 
     /**
@@ -238,19 +239,14 @@ public class DownloadThread implements Runnable {
     }
 
     @Override
-    public void run() {
-        try {
-            // Connect to the URL
-            HttpURLConnection conn = getHttpConnection();
+    public Long call() throws Exception {
+        // Connect to the URL
+        HttpURLConnection conn = getHttpConnection();
 
-            // Download to file
-            downloadToFile(conn);
-        } catch (IOException ex) {
-            synchronized (currentDownload.progress) {
-                currentDownload.progress.setException(ex);
-                currentDownload.progress.notifyAll();
-            }
-        }
+        // Download to file
+        downloadToFile(conn);
+        
+        return downloadedSize;
     }
 
 }
