@@ -151,6 +151,7 @@ public class DownloadThread implements Callable<Long> {
 
             synchronized (currentDownload.progress) {
                 currentDownload.progress.updateDownloadedSize(downloadedSize);
+                currentDownload.progress.updateProgressBar();
                 currentDownload.progress.notifyAll();
             }
 
