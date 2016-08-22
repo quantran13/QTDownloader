@@ -158,10 +158,7 @@ public class DownloadThread implements Callable<Long> {
             // While the total downloaded size is still smaller than the 
             // content length from the connection, keep reading data.
             while (downloadedSize < contentLength) {
-//                Instant start = progress.startDownloadTimeStamp;
                 result = dataStream.read(dataArray, 0, chunkSize);
-//                Instant stop = Instant.now();
-//                long time = Duration.between(stop, start).getNano();
 
                 if (result == -1) {
                     break;
@@ -173,9 +170,8 @@ public class DownloadThread implements Callable<Long> {
 
                 synchronized (currentDownload.progress) {
                     currentDownload.progress.updateDownloadedSize(result);
-                    currentDownload.progress.setSizeChange(result);
+                    currentDownload.progress.updateDownloadedSinceStart(result);
                     currentDownload.progress.updateProgressBar();
-                    currentDownload.progress.setSizeChange(0);
 
                     currentDownload.progress.notifyAll();
                 }
@@ -218,7 +214,7 @@ public class DownloadThread implements Callable<Long> {
      * Gets the size of the current part that needs to be downloaded.
      *
      * @return The size of the current part needed to be downloaded.
-     */
+     */ 
     public long getPartSize() {
         return partSize;
     }
