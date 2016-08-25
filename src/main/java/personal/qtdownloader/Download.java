@@ -22,6 +22,7 @@ import java.text.SimpleDateFormat;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Base64;
 import java.util.Date;
 import java.util.HashMap;
@@ -37,9 +38,11 @@ import static personal.qtdownloader.Main.mURL;
  */
 public class Download implements Runnable {
 
+    protected final Progress progress;
+    protected final boolean[] joinPartIsDone;
+    
     private final String url;
     private final int partsCount;
-    protected final Progress progress;
     private final boolean mResume;
     private final String outputDirectory;
     private final String fileName;
@@ -67,6 +70,9 @@ public class Download implements Runnable {
         this.userOptions = Main.userOptions;
         this.downloadThreadsPool = Executors.newFixedThreadPool(partsCount);
         this.futurePool = new Future[partsCount];
+        
+        this.joinPartIsDone = new boolean[partsCount + 2];
+        Arrays.fill(this.joinPartIsDone, false);
         
         // Get the user option for whether to resume downloading or not.
         this.mResume = "y".equals(userOptions.get("resume"));
@@ -157,44 +163,6 @@ public class Download implements Runnable {
 
         return downloadThreadsList;
     }
-
-    /**
-     * Join the downloaded parts together into the file with the given file name.
-     *
-     * @param fileName Name of output file.
-     * @param downloadParts An ArrayList of download threads.
-     *
-     * @throws java.io.IOException if failed to open the output file.
-     */
-    private void joinDownloadedParts(String fileName, ArrayList<DownloadThread> downloadParts)
-            throws IOException {
-        String outputFile = outputDirectory + fileName;
-
-        try (RandomAccessFile mainFile = new RandomAccessFile(outputFile, "rw")) {
-            FileChannel mainChannel = mainFile.getChannel();
-            long startPosition = 0;
-
-            for (int i = 0; i < downloadParts.size(); i++) {
-                String partName = partNamesLists[i];
-
-                try (RandomAccessFile partFile = new RandomAccessFile(partName, "rw")) {
-                    long partSize = downloadParts.get(i).getDownloadedSize();
-                    FileChannel partFileChannel = partFile.getChannel();
-                    long transferedBytes = mainChannel.transferFrom(partFileChannel,
-                            startPosition, partSize);
-
-                    startPosition += transferedBytes;
-
-                    if (transferedBytes != partSize) {
-                        String errMessage = "Error joining file at part: "
-                                + (i + 1) + "!\n";
-                        errMessage += "Transfered bytes: " + transferedBytes;
-                        throw new RuntimeException(errMessage);
-                    }
-                }
-            }
-        }
-    }
     
     /**
      * Print the appropriate error message for the given exception.
@@ -243,6 +211,14 @@ public class Download implements Runnable {
      */
     public void joinThread() throws InterruptedException {
         mThread.join();
+    }
+    
+    /**
+     * Get the output file's path.
+     * @return The output file's path.
+     */
+    public String getMainFilePath() {
+        return outputDirectory + fileName;
     }
     
     /**
@@ -345,20 +321,13 @@ public class Download implements Runnable {
         // Wait for the threads to finish downloading
         while (downloadThreadsIsDone()) {}
         
-        for (int i = 0; i < futurePool.length; i++) {
+        for (Future futureTask : futurePool) {
             try {
-                Long downloadedBytes = (Long) futurePool[i].get();
-               
-                if (downloadedBytes == 1) {
-                    String errMessage = "Download incompleted at part "
-                        + (i + 1) + "!";
-                
-                    printErrorMessage(new RuntimeException(errMessage));
-                }
-            } catch (ExecutionException ex) {
+                futureTask.get();
+            }catch (ExecutionException ex) {
                 Throwable exception = ex.getCause();
                 printErrorMessage((Exception) exception);
-            } catch (InterruptedException ex) {
+            }catch (InterruptedException ex) {
                 printErrorMessage(ex);
             }
         }
@@ -370,29 +339,6 @@ public class Download implements Runnable {
         double downloadTime = ((double) (Duration.between(start,
                 downloadFinish).toMillis())) / 1000;
         System.out.println("\n\nTotal download time: " + downloadTime);
-
-        try {
-            // Join the downloaded parts
-            joinDownloadedParts(fileName, downloadParts);
-        } catch (Exception ex) {
-            printErrorMessage(ex);
-        }
-
-        for (int i = 0; i < downloadParts.size(); i++) {
-            String partName = partNamesLists[i];
-            Path filePath = Paths.get(partName);
-            try {
-                Files.deleteIfExists(filePath);
-            } catch (IOException ex) {
-                // TODO log error if failed to delete part files.
-            }
-        }
-        
-        Instant joinFinishedTime = Instant.now();
-        double joinTime = ((double) (Duration.between(downloadFinish,
-                joinFinishedTime).toMillis())) / 1000;
-
-        System.out.println("Total join time: " + joinTime);
     }
 
 }

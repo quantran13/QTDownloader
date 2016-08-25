@@ -19,6 +19,10 @@ import java.nio.channels.FileChannel;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 /**
  *
@@ -35,6 +39,7 @@ public class DownloadThread implements Callable<Long> {
     private long downloadedSize;
     private long alreadyDownloadedSize;
 
+    private final int partNumber;
     private final String mFileName;
     private final Download currentDownload;
     private final HashMap<String, String> userOptions;
@@ -46,6 +51,8 @@ public class DownloadThread implements Callable<Long> {
      * @param download The main download thread.
      */
     public DownloadThread(int partNumber, Download download) {
+        this.partNumber = partNumber;
+        
         // Calculate the start byte and end byte
         partSize = download.progress.getContentSize() / download.getPartCount();
         long start_byte = (partNumber - 1) * partSize;
@@ -67,9 +74,6 @@ public class DownloadThread implements Callable<Long> {
         // Get the file name.
         mFileName = Main.PROGRAM_TEMP_DIR + "." + (new File(url.toExternalForm()).getName()
                 + ".part" + partNumber);
-
-        // Initialize the thread
-        //mThread = new Thread(this, "Part #" + partNumber);
 
         currentDownload = download;
 
@@ -226,6 +230,52 @@ public class DownloadThread implements Callable<Long> {
 
         // Download to file
         downloadToFile(conn);
+        
+        // Check if the download was incomplete or not
+        if (downloadedSize != partSize) {
+            String errMessage = "Download incomplete at part " + partNumber + "!";
+            throw new RuntimeException(errMessage);
+        }
+        
+        // Write the data to the main file from the part file
+        synchronized (currentDownload.joinPartIsDone)  {
+            if (partNumber != 1) 
+                while (!currentDownload.joinPartIsDone[partNumber - 2])
+                    currentDownload.joinPartIsDone.wait();
+        }
+        
+        ExecutorService joinPartsThreadPool = Executors.newFixedThreadPool(1);
+        JoinPartThread joinPartThrd = new JoinPartThread(currentDownload.getMainFilePath(), 
+                mFileName, startByte, partSize);
+        
+        // Get the result and compare to the size of the part the thread is 
+        // downloading.
+        Future<Long> result = joinPartsThreadPool.submit(joinPartThrd);
+        Long transferredBytes;
+        try {
+            transferredBytes = result.get();
+        } catch (ExecutionException ex) {
+            String errMessage = "Error while transferring from part " +
+                    partNumber + " to the main file!";
+            throw new RuntimeException(errMessage, ex.getCause());
+        } catch (SecurityException ex) {
+            String errMessage = "You do not have the permission to the output"
+                    + "file!";
+            throw new RuntimeException(errMessage, ex);
+        }
+        
+        joinPartsThreadPool.shutdown();
+        synchronized (currentDownload.joinPartIsDone) {
+            currentDownload.joinPartIsDone[partNumber - 1] = true;
+            currentDownload.joinPartIsDone.notifyAll();
+        }
+        
+        if (transferredBytes != partSize) {
+            String errMessage = "Transfer from part file to main file incomplete"
+                    + " at part " + partNumber + "!";
+            errMessage += " " + transferredBytes + " " + partSize;
+            throw new RuntimeException(errMessage);
+        }
         
         return downloadedSize;
     }
