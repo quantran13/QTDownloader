@@ -16,6 +16,9 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.concurrent.Callable;
@@ -39,6 +42,7 @@ public class DownloadThread implements Callable<Long> {
     private long downloadedSize;
     private long alreadyDownloadedSize;
 
+    private final long startCopyPosition;
     private final int partNumber;
     private final String mFileName;
     private final Download currentDownload;
@@ -55,6 +59,7 @@ public class DownloadThread implements Callable<Long> {
         
         // Calculate the start byte and end byte
         partSize = download.progress.getContentSize() / download.getPartCount();
+        
         long start_byte = (partNumber - 1) * partSize;
         long end_byte;
         if (partNumber == download.getPartCount())
@@ -64,6 +69,7 @@ public class DownloadThread implements Callable<Long> {
         
         this.startByte = start_byte;
         this.endByte = end_byte;
+        this.startCopyPosition = startByte;
         this.partSize = end_byte - start_byte + 1;
         this.resume = download.resumeDownload();
         this.url = download.getDownloadURL();
@@ -72,7 +78,8 @@ public class DownloadThread implements Callable<Long> {
         userOptions = Main.userOptions;
 
         // Get the file name.
-        mFileName = Main.PROGRAM_TEMP_DIR + "." + (new File(url.toExternalForm()).getName()
+        mFileName = Main.PROGRAM_TEMP_DIR + "."
+                + (new File(url.toExternalForm()).getName()
                 + ".part" + partNumber);
 
         currentDownload = download;
@@ -104,6 +111,8 @@ public class DownloadThread implements Callable<Long> {
         String downloadRange = "bytes=" + startByte + "-" + endByte;
         conn.setRequestProperty("Range", downloadRange);
 
+        // Get the http login credentials and set the corresponding properties
+        // in the http connection varible
         if (userOptions.containsKey("-u") && userOptions.containsKey("-p")) {
             String username = userOptions.get("-u");
             String password = userOptions.get("-p");
@@ -175,7 +184,7 @@ public class DownloadThread implements Callable<Long> {
                 synchronized (currentDownload.progress) {
                     currentDownload.progress.updateDownloadedSize(result);
                     currentDownload.progress.updateDownloadedSinceStart(result);
-                    currentDownload.progress.updateProgressBar();
+                    //currentDownload.progress.updateProgressBar();
 
                     currentDownload.progress.notifyAll();
                 }
@@ -237,6 +246,14 @@ public class DownloadThread implements Callable<Long> {
             throw new RuntimeException(errMessage);
         }
         
+        // Delete the main file if it exists
+        Path mainFilePath = Paths.get(currentDownload.getMainFilePath());
+        try {
+            Files.deleteIfExists(mainFilePath);
+        } catch (IOException ex) {
+            // TODO Log the error
+        }
+        
         // Write the data to the main file from the part file
         synchronized (currentDownload.joinPartIsDone)  {
             if (partNumber != 1) 
@@ -245,8 +262,9 @@ public class DownloadThread implements Callable<Long> {
         }
         
         ExecutorService joinPartsThreadPool = Executors.newFixedThreadPool(1);
-        JoinPartThread joinPartThrd = new JoinPartThread(currentDownload.getMainFilePath(), 
-                mFileName, startByte, partSize);
+        JoinPartThread joinPartThrd = new JoinPartThread(
+                currentDownload.getMainFilePath(), 
+                mFileName, startCopyPosition, partSize);
         
         // Get the result and compare to the size of the part the thread is 
         // downloading.
@@ -254,6 +272,7 @@ public class DownloadThread implements Callable<Long> {
         Long transferredBytes;
         try {
             transferredBytes = result.get();
+            System.out.println("Yay done " + partNumber + " " + transferredBytes);
         } catch (ExecutionException ex) {
             String errMessage = "Error while transferring from part " +
                     partNumber + " to the main file!";

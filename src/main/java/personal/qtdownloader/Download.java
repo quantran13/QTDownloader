@@ -8,12 +8,10 @@ package personal.qtdownloader;
 
 import java.io.File;
 import java.io.IOException;
-import java.io.RandomAccessFile;
 import java.net.ConnectException;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
-import java.nio.channels.FileChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -47,7 +45,7 @@ public class Download implements Runnable {
     private final String outputDirectory;
     private final String fileName;
     private final String originalFileName;
-    private final String[] partNamesLists;
+    private final String[] partNamesList;
     private final HashMap<String, String> userOptions;
     private final Thread mThread;
     
@@ -82,16 +80,17 @@ public class Download implements Runnable {
         String outputDir = userOptions.get("-o");
         this.outputDirectory = (userOptions.containsKey("-o")) ? outputDir : "./";
 
-        // Get the file name from either the user's option or the file's default name
+        // Get the file name from either the user's option 
+        // use or the file's default name
         String usrFileName = userOptions.get("-f");
         this.fileName = (userOptions.containsKey("-f")) ? 
                 usrFileName : (new File(url).getName());
         this.originalFileName = new File(url).getName();
 
         // Generate the list of part files' names.
-        this.partNamesLists = new String[partsCount];
+        this.partNamesList = new String[partsCount];
         for (int i = 0; i < partsCount; i++) {
-            partNamesLists[i] = Main.PROGRAM_TEMP_DIR + "." + originalFileName
+            partNamesList[i] = Main.PROGRAM_TEMP_DIR + "." + originalFileName
                     + ".part" + (i + 1);
         }
 
@@ -103,7 +102,8 @@ public class Download implements Runnable {
      * Check the validity of the given URL.
      *
      * @param urlString The given URL.
-     * @return The content size from the requested URL. If -1 then the response from the server is not success.
+     * @return The content size from the requested URL. 
+     * If -1 then the response from the server is not success.
      *
      * @throws ConnectException if failed to connect to the given URL.
      */
@@ -165,11 +165,27 @@ public class Download implements Runnable {
     }
     
     /**
+     * Delete the part files after downloading.
+     */
+    private void deletePartFiles() {
+        for (String partFileName : partNamesList) {
+            Path partFilePath = Paths.get(partFileName);
+            
+            try {
+                Files.deleteIfExists(partFilePath);
+            } catch (IOException ex) {
+                // TODO Log the exception
+            }
+        }
+    }
+    
+    /**
      * Print the appropriate error message for the given exception.
      *
      * @param ex The exception whose message is to be printed.
      */
     private static void printErrorMessage(Exception ex) {
+        ex.printStackTrace();
         /*
          * Print the appropriate error message from the exception caught.
          */
@@ -257,7 +273,11 @@ public class Download implements Runnable {
         return partsCount;
     }
     
-    public boolean downloadThreadsIsDone() {
+    /**
+     * Check if all the download threads have finished.
+     * @return True if all the download threads have finished, false otherwise.
+     */
+    private boolean downloadThreadsIsDone() {
         for (Future task : futurePool) {
             if (!task.isDone())
                 return false;
@@ -265,7 +285,7 @@ public class Download implements Runnable {
         
         return true;
     }
-
+    
     /**
      * Start downloading from the given URL.
      */
@@ -310,13 +330,11 @@ public class Download implements Runnable {
         System.out.println();
 
         // Start the threads to download.
-        ArrayList<DownloadThread> downloadParts;
-
         Instant start = Instant.now();
         progress.setStartDownloadTime(start);
         progress.setUrlVerifyResult(result);
-
-        downloadParts = startDownloadThreads(partsCount);
+        
+        startDownloadThreads(partsCount);
         
         // Wait for the threads to finish downloading
         while (downloadThreadsIsDone()) {}
@@ -333,6 +351,9 @@ public class Download implements Runnable {
         }
         
         downloadThreadsPool.shutdown();
+        
+        // Delete the part files
+        deletePartFiles();
 
         // Notify that all parts have finished downloading        
         Instant downloadFinish = Instant.now();
