@@ -185,7 +185,6 @@ public class Download implements Runnable {
      * @param ex The exception whose message is to be printed.
      */
     private static void printErrorMessage(Exception ex) {
-        ex.printStackTrace();
         /*
          * Print the appropriate error message from the exception caught.
          */

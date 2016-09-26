@@ -18,17 +18,12 @@ public class JoinPartThread implements Callable<Long> {
     
     private final String mainFileName;
     private final String partFileName;
-    private final long startPosition;
     private final long partSize;
     
-    public JoinPartThread(String mainFileName, String partFileName, 
-            long startPosition, long partSize) {
+    public JoinPartThread(String mainFileName, String partFileName, long partSize) {
         this.mainFileName = mainFileName;
         this.partFileName = partFileName;
-        this.startPosition = startPosition;
         this.partSize = partSize;
-        
-        System.out.println(startPosition);
     }
     
     private long writeDataToMainFile() throws IOException {
@@ -37,15 +32,15 @@ public class JoinPartThread implements Callable<Long> {
             FileChannel mainChannel = mainFile.getChannel();
             FileChannel partFileChannel = partFile.getChannel();
             
-            // Try tranferring 10 times
-            int trial = 0;
+            // Start appending the data at the end of the main file
+            long mainFileSize = mainFile.length();
+            
+            // Try tranferring until it's done or an exception is thrown
             long transferredBytes = 0;
             
-            while (transferredBytes != partSize && trial < 10) {
+            while (transferredBytes != partSize) {
                 transferredBytes += mainChannel.transferFrom(partFileChannel,
-                    startPosition + transferredBytes, partSize);
-                trial++;
-                System.out.println("Trying bitch");
+                    mainFileSize + transferredBytes, partSize);
             }
             
             return transferredBytes;

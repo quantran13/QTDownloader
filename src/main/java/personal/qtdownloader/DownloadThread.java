@@ -42,7 +42,6 @@ public class DownloadThread implements Callable<Long> {
     private long downloadedSize;
     private long alreadyDownloadedSize;
 
-    private final long startCopyPosition;
     private final int partNumber;
     private final String mFileName;
     private final Download currentDownload;
@@ -69,7 +68,6 @@ public class DownloadThread implements Callable<Long> {
         
         this.startByte = start_byte;
         this.endByte = end_byte;
-        this.startCopyPosition = startByte;
         this.partSize = end_byte - start_byte + 1;
         this.resume = download.resumeDownload();
         this.url = download.getDownloadURL();
@@ -264,7 +262,7 @@ public class DownloadThread implements Callable<Long> {
         ExecutorService joinPartsThreadPool = Executors.newFixedThreadPool(1);
         JoinPartThread joinPartThrd = new JoinPartThread(
                 currentDownload.getMainFilePath(), 
-                mFileName, startCopyPosition, partSize);
+                mFileName, partSize);
         
         // Get the result and compare to the size of the part the thread is 
         // downloading.
@@ -272,7 +270,6 @@ public class DownloadThread implements Callable<Long> {
         Long transferredBytes;
         try {
             transferredBytes = result.get();
-            System.out.println("Yay done " + partNumber + " " + transferredBytes);
         } catch (ExecutionException ex) {
             String errMessage = "Error while transferring from part " +
                     partNumber + " to the main file!";
