@@ -71,6 +71,7 @@ public class Download implements Runnable {
         
         this.joinPartIsDone = new boolean[partsCount + 2];
         Arrays.fill(this.joinPartIsDone, false);
+        System.out.println(Arrays.toString(joinPartIsDone));
         
         // Get the user option for whether to resume downloading or not.
         this.mResume = "y".equals(userOptions.get("resume"));

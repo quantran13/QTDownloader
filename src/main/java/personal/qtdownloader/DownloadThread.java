@@ -253,11 +253,18 @@ public class DownloadThread implements Callable<Long> {
         }
         
         // Write the data to the main file from the part file
+        int countWait = 0;
         synchronized (currentDownload.joinPartIsDone)  {
-            if (partNumber != 1) 
-                while (!currentDownload.joinPartIsDone[partNumber - 2])
+            if (partNumber != 1) { 
+                while (!currentDownload.joinPartIsDone[partNumber - 2]) {
+                    countWait++;
                     currentDownload.joinPartIsDone.wait();
+                }
+            }
         }
+        
+        System.out.print("\n Part" + partNumber + " waited " + countWait + " times");
+        System.out.print("\nCreating new thread no " + partNumber);
         
         ExecutorService joinPartsThreadPool = Executors.newFixedThreadPool(1);
         JoinPartThread joinPartThrd = new JoinPartThread(
