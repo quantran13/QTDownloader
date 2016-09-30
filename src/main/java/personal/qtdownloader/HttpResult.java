@@ -10,6 +10,11 @@ public class HttpResult {
 
     public int responseCode;
     public long contentLength;
+    
+    public HttpResult() {
+        responseCode = 404;
+        contentLength = -1;
+    }
 
     /**
      *

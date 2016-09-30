@@ -306,7 +306,7 @@ public class Download implements Runnable {
         // Check the validity of the URL
         System.out.println("Sending HTTP request...");
         
-        HttpResult result = null;
+        HttpResult result = new HttpResult();
         try {
             result = checkURLValidity(downloadUrl);
         } catch (ConnectException ex) {
