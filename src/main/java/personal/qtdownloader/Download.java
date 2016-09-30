@@ -71,7 +71,6 @@ public class Download implements Runnable {
         
         this.joinPartIsDone = new boolean[partsCount + 2];
         Arrays.fill(this.joinPartIsDone, false);
-        System.out.println(Arrays.toString(joinPartIsDone));
         
         // Get the user option for whether to resume downloading or not.
         this.mResume = "y".equals(userOptions.get("resume"));
@@ -329,6 +328,13 @@ public class Download implements Runnable {
                 + Utility.readableFileSize(result.contentLength));
         System.out.println();
 
+        // Delete the main file if it exists
+        try {
+            Files.deleteIfExists(Paths.get(getMainFilePath()));
+        } catch (IOException ex) {
+            // TODO Log the error as INFO if cannot delete the main file
+        }
+        
         // Start the threads to download.
         Instant start = Instant.now();
         progress.setStartDownloadTime(start);

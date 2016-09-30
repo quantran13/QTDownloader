@@ -77,7 +77,7 @@ public class Progress {
         String undone = new String(new char[100 - (int) percent]).replace("\0", " ");
         
         // Print the progress bar
-//        System.out.format("\r[" + done + undone + "] %6.2f%% %7.2f"
-//                + speedUnits[unit] + "/s    ", percent, speed);
+        System.out.format("\r[" + done + undone + "] %6.2f%% %7.2f"
+                + speedUnits[unit] + "/s    ", percent, speed);
     }
 }

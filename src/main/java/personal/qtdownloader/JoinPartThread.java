@@ -34,7 +34,6 @@ public class JoinPartThread implements Callable<Long> {
             
             // Start appending the data at the end of the main file
             long mainFileSize = mainFile.length();
-            System.out.print("\nStart of " + partFileName + " " + mainFileSize);
             
             // Try tranferring until it's done or an exception is thrown
             long transferredBytes = 0;
@@ -43,9 +42,6 @@ public class JoinPartThread implements Callable<Long> {
                 transferredBytes += mainChannel.transferFrom(partFileChannel,
                     mainFileSize + transferredBytes, partSize);
             }
-            
-            System.out.print("\nYay done " +  partFileName + " " + transferredBytes);
-            System.out.print("\nSize after transfer: " + mainFile.length());
             
             return transferredBytes;
         }

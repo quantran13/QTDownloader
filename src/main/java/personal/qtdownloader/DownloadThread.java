@@ -244,36 +244,23 @@ public class DownloadThread implements Callable<Long> {
             throw new RuntimeException(errMessage);
         }
         
-        // Delete the main file if it exists
-        Path mainFilePath = Paths.get(currentDownload.getMainFilePath());
-        try {
-            Files.deleteIfExists(mainFilePath);
-        } catch (IOException ex) {
-            // TODO Log the error
-        }
-        
         // Write the data to the main file from the part file
-        int countWait = 0;
         synchronized (currentDownload.joinPartIsDone)  {
             if (partNumber != 1) { 
-                while (!currentDownload.joinPartIsDone[partNumber - 2]) {
-                    countWait++;
+                while (!currentDownload.joinPartIsDone[partNumber - 2])
                     currentDownload.joinPartIsDone.wait();
-                }
             }
         }
         
-        System.out.print("\n Part" + partNumber + " waited " + countWait + " times");
-        System.out.print("\nCreating new thread no " + partNumber);
-        
+        // Create a new join part thread
         ExecutorService joinPartsThreadPool = Executors.newFixedThreadPool(1);
-        JoinPartThread joinPartThrd = new JoinPartThread(
+        JoinPartThread joinPartThread = new JoinPartThread(
                 currentDownload.getMainFilePath(), 
                 mFileName, partSize);
         
         // Get the result and compare to the size of the part the thread is 
         // downloading.
-        Future<Long> result = joinPartsThreadPool.submit(joinPartThrd);
+        Future<Long> result = joinPartsThreadPool.submit(joinPartThread);
         Long transferredBytes;
         try {
             transferredBytes = result.get();
