@@ -24,6 +24,7 @@ import java.util.Arrays;
 import java.util.Base64;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.Scanner;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -43,7 +44,7 @@ public class Download implements Runnable {
     private final int partsCount;
     private final boolean mResume;
     private final String outputDirectory;
-    private final String fileName;
+    private String fileName;
     private final String originalFileName;
     private final String[] partNamesList;
     private final HashMap<String, String> userOptions;
@@ -136,6 +137,57 @@ public class Download implements Runnable {
             return result;
         } catch (IOException ex) {
             throw new ConnectException(ex.getMessage());
+        }
+    }
+    
+    /**
+     *
+     */
+    private void checkIfFileExistedInFolder() {
+        boolean fileExisted = Files.exists(Paths.get(getMainFilePath()));
+        
+        if (fileExisted) {
+            System.out.println("There is already a file named " + fileName
+                    + " in folder " + outputDirectory);
+            System.out.print("Do you want to overwrite it (y/n)? ");
+            
+            char answer = 0;
+            Scanner reader = new Scanner(System.in);
+            while (answer != 'y' && answer != 'Y'
+                    && answer != 'n' && answer != 'N') {
+                answer = reader.next().charAt(0);
+            }
+            
+            if (answer != 'y') {
+                System.out.print("Do you want to change the output file?");
+                System.out.print(" If not your file will be renamed to (1)" +
+                        fileName + ". ");
+                
+                answer = 0;
+                while (answer != 'y' && answer != 'Y'
+                        && answer != 'n' && answer != 'N') {
+                    answer = reader.next().charAt(0);
+                }
+                
+                if (answer == 'y') {
+                    String newFileName = fileName;
+
+                    while (newFileName.equals(fileName) || newFileName.equals("")) {
+                        System.out.print("New file name: ");
+                        newFileName = reader.nextLine();
+                    }
+                    
+                    fileName = newFileName;
+                } else {
+                    fileName = "(1)" + fileName;
+                }
+            } else {
+                try {
+                    Files.deleteIfExists(Paths.get(getMainFilePath()));
+                } catch (IOException ex) {
+                    // TODO log the error
+                }
+            }
         }
     }
 
@@ -289,7 +341,7 @@ public class Download implements Runnable {
      * Start downloading from the given URL.
      */
     @Override
-    public void run()   {
+    public void run() {
         // Start the download
         DateFormat dateFormat = new SimpleDateFormat("dd-MM-yyyy HH:mm:ss");
         Date date = new Date();
@@ -329,6 +381,7 @@ public class Download implements Runnable {
         System.out.println();
 
         // Delete the main file if it exists
+        checkIfFileExistedInFolder();
         try {
             Files.deleteIfExists(Paths.get(getMainFilePath()));
         } catch (IOException ex) {
