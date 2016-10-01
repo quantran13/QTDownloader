@@ -176,12 +176,6 @@ public class Main {
         } catch (IOException ex) {
             printErrorMessage(ex);
         }
-
-        // Print the current time
-        DateFormat dateFormat = new SimpleDateFormat("dd-MM-yyyy HH:mm:ss");
-        Date date = new Date();
-        System.out.println("Finished downloading!");
-        System.out.println("\n--- " + dateFormat.format(date) + " ---");
     }
 
     /**

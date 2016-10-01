@@ -6,8 +6,10 @@
  */
 package personal.qtdownloader;
 
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.net.ConnectException;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
@@ -141,53 +143,73 @@ public class Download implements Runnable {
     }
     
     /**
-     *
+     * Check if there is a file with the same name as the output file.
+     * If there is, prompt the user to for their choice:
+     * whether to overwrite, or change the file name to something else.
      */
-    private void checkIfFileExistedInFolder() {
+    private boolean checkForDuplicateFileInFolder() throws IOException {
         boolean fileExisted = Files.exists(Paths.get(getMainFilePath()));
         
         if (fileExisted) {
+            // There exists a file with the same name.
             System.out.println("There is already a file named " + fileName
                     + " in folder " + outputDirectory);
-            System.out.print("Do you want to overwrite it (y/n)? ");
             
+            
+            // Get the user's choice whether to overwrite the file or not.
             char answer = 0;
             Scanner reader = new Scanner(System.in);
             while (answer != 'y' && answer != 'Y'
                     && answer != 'n' && answer != 'N') {
+                System.out.print("Do you want to overwrite it (y/n)? ");
                 answer = reader.next().charAt(0);
             }
             
+            // Check the user's choice.
             if (answer != 'y') {
-                System.out.print("Do you want to change the output file?");
-                System.out.print(" If not your file will be renamed to (1)" +
-                        fileName + ". ");
+                // If the user wants to, get the user's choice whether to
+                // manually change the filename or not.
+                System.out.println("If you don't want to change the output file, "
+                        + "your file will be renamed to (1)" + fileName + " ");
                 
                 answer = 0;
                 while (answer != 'y' && answer != 'Y'
                         && answer != 'n' && answer != 'N') {
+                    System.out.print("Do you want to change it? (y/n) ");
                     answer = reader.next().charAt(0);
                 }
                 
                 if (answer == 'y') {
+                    // If the user wants to manually change it, prompt
+                    // the user for the new file name.
                     String newFileName = fileName;
+                    
+                    InputStreamReader inp = new InputStreamReader(System.in);
+                    BufferedReader br = new BufferedReader(inp);
 
                     while (newFileName.equals(fileName) || newFileName.equals("")) {
                         System.out.print("New file name: ");
-                        newFileName = reader.nextLine();
+                        newFileName = br.readLine();
                     }
                     
                     fileName = newFileName;
                 } else {
+                    // If the user doesn't want to, append a prefix.
                     fileName = "(1)" + fileName;
                 }
+                
+                return true;
             } else {
                 try {
                     Files.deleteIfExists(Paths.get(getMainFilePath()));
                 } catch (IOException ex) {
                     // TODO log the error
                 }
+                
+                return false;
             }
+        } else {
+            return false;
         }
     }
 
@@ -342,10 +364,23 @@ public class Download implements Runnable {
      */
     @Override
     public void run() {
+        // Check if there is a file whose name is the same as the output file
+        boolean checkResult = true;
+        
+        while (checkResult) {
+            try {
+                checkResult = checkForDuplicateFileInFolder();
+            } catch (IOException ex) {
+                RuntimeException rte = new RuntimeException(
+                        "Error while reading user's choice", ex);
+                printErrorMessage(rte);
+            }
+        }
+        
         // Start the download
         DateFormat dateFormat = new SimpleDateFormat("dd-MM-yyyy HH:mm:ss");
         Date date = new Date();
-        System.out.println("--- " + dateFormat.format(date) + " ---\n");
+        System.out.println("\n--- " + dateFormat.format(date) + " ---\n");
         System.out.println("Downloading from: " + mURL);
         
         // Create the URL object
@@ -379,14 +414,6 @@ public class Download implements Runnable {
         System.out.println("Fize size: "
                 + Utility.readableFileSize(result.contentLength));
         System.out.println();
-
-        // Delete the main file if it exists
-        checkIfFileExistedInFolder();
-        try {
-            Files.deleteIfExists(Paths.get(getMainFilePath()));
-        } catch (IOException ex) {
-            // TODO Log the error as INFO if cannot delete the main file
-        }
         
         // Start the threads to download.
         Instant start = Instant.now();
@@ -419,6 +446,12 @@ public class Download implements Runnable {
         double downloadTime = ((double) (Duration.between(start,
                 downloadFinish).toMillis())) / 1000;
         System.out.println("\n\nTotal download time: " + downloadTime);
+        
+        // Print the current time
+        dateFormat = new SimpleDateFormat("dd-MM-yyyy HH:mm:ss");
+        date = new Date();
+        System.out.println("Finished downloading!");
+        System.out.println("\n--- " + dateFormat.format(date) + " ---");
     }
 
 }
