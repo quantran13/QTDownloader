@@ -152,7 +152,7 @@ public class Download implements Runnable {
         
         if (fileExisted) {
             // There exists a file with the same name.
-            System.out.println("There is already a file named " + fileName
+            System.out.println("\nThere is already a file named " + fileName
                     + " in folder " + outputDirectory);
             
             

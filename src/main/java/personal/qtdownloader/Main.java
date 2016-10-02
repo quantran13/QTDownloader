@@ -134,8 +134,6 @@ public class Main {
             return;
         }
 
-        System.out.print("\n");
-
         // If failed to read from the download list file
         // create a new hashmap for the download sessions list
         if (downloadSessionList == null) {
