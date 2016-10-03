@@ -31,7 +31,14 @@
             <groupId>com.h2database</groupId>
             <artifactId>h2</artifactId>
             <version>1.4.192</version>
+            <scope>compile</scope>
         </dependency>
+<!--        <dependency>
+            <groupId>h2</groupId>
+            <artifactId>h2</artifactId>
+            <version>1.0</version>
+            <scope>provided</scope>
+        </dependency>-->
     </dependencies>
     <build>
         <directory>${HOME}/.QTDownloader</directory>

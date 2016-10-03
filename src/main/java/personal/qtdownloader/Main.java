@@ -18,6 +18,7 @@ import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.nio.file.InvalidPathException;
+import java.sql.*;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -29,20 +30,26 @@ import java.util.Map;
 import java.util.Scanner;
 import java.util.Set;
 
+
 public class Main {
 
     public static String mURL;
+    public static HashMap<String, String> userOptions;
+    public static Connection dbConn;
 
     public static final String PROGRAM_DIR;
     public static final String DOWNLOADED_LIST_FILENAME;
     public static final String PROGRAM_TEMP_DIR;
     public static final HashMap<String, String> cmdLineOptions;
-    public static HashMap<String, String> userOptions;
+    public static final String DATABASE_FILE;
+    public static final String DATABASE_PATH;
+    public static final String TABLE_NAME;
 
     /**
      * Initialize static final fields.
      */
     static {
+        // Add command line options
         cmdLineOptions = new HashMap<>();
         cmdLineOptions.put("-o", "Output file's directory");
         cmdLineOptions.put("-f", "Output file name");
@@ -52,9 +59,8 @@ public class Main {
         cmdLineOptions.put("--username", "HTTP authorization username");
         cmdLineOptions.put("-p", "HTTP authorization password");
         cmdLineOptions.put("--password", "HTTP authorization password");
-//        cmdLineOptions.put("--proxy-username", "Username for proxy");
-//        cmdLineOptions.put("--proxy-password", "Password for proxy");
 
+        // Set up necessary directory paths
         String programDir = System.getenv("HOME") + "/.QTDownloader";
         String programTmpDir = programDir + "/tmp/";
 
@@ -84,6 +90,11 @@ public class Main {
         PROGRAM_DIR = programDir;
         PROGRAM_TEMP_DIR = programTmpDir;
         DOWNLOADED_LIST_FILENAME = programDir + "/.filelist.csv";
+        
+        // Set up database path
+        DATABASE_FILE = "qtdb";
+        DATABASE_PATH = programDir + DATABASE_FILE;
+        TABLE_NAME = "sessions";
     }
 
     /**
@@ -92,12 +103,12 @@ public class Main {
      * @throws java.lang.InterruptedException
      */
     public static void main(String[] args) {
+        // Parse the arguments
         if (args.length == 0) {
             printUsage();
             System.exit(0);
         }
 
-        // Read the arguments
         userOptions = new HashMap<>();
         try {
             userOptions = readArgumentOptions(args);
@@ -107,23 +118,14 @@ public class Main {
 
         mURL = args[args.length - 1]; // The url is the last argument.
         int partsCount = 8;           // Number of parts to divide to download.
-
-        // Get the list of downloaded files
-        HashMap<String, DownloadSession> downloadSessionList = null;
-        try {
-            downloadSessionList = getListOfDownloadedFiles();
-        } catch (IOException ex) {
-            printErrorMessage(ex);
-        }
-
+        
+        // Set up the database
+        setUpDatabase();
+        
         // Check if the file has been downloaded or not
         String fileName = new File(mURL).getName();
         DownloadSession currentDownloadSession;
-        currentDownloadSession = checkIfFileWasDownloaded(downloadSessionList, 
-                fileName, mURL);
-
-        // If the file was downloaded before.
-        boolean downloaded = currentDownloadSession.alreadyDownloaded;
+        currentDownloadSession = checkIfFileWasDownloaded(fileName, mURL);
 
         // If the last attempt to download the file was interrupted and
         // the user chose to resume downloading.
@@ -135,26 +137,6 @@ public class Main {
         }
 
         System.out.print("\n");
-
-        // If failed to read from the download list file
-        // create a new hashmap for the download sessions list
-        if (downloadSessionList == null) {
-            downloadSessionList = new HashMap<>();
-        }
-
-        if (downloaded) {
-            currentDownloadSession = downloadSessionList.get(mURL);
-            currentDownloadSession.setDownloadSize(-1);
-        } else {
-            currentDownloadSession = new DownloadSession(fileName, mURL, -1);
-            downloadSessionList.put(mURL, currentDownloadSession);
-        }
-
-        try {
-            writeInfo(downloadSessionList);
-        } catch (IOException ex) {
-            printErrorMessage(ex);
-        }
         
         // Start new download with the given URL
         Download newDownload = new Download(mURL, partsCount);
@@ -171,17 +153,53 @@ public class Main {
 
         // Save the download to the downloaded file list
         currentDownloadSession.setDownloadSize(newDownload.getDownloadedSize());
-        try {
-            writeInfo(downloadSessionList);
-        } catch (IOException ex) {
-            printErrorMessage(ex);
-        }
+        writeDownloadSessionInfoToDB(currentDownloadSession);
 
         // Print the current time
         DateFormat dateFormat = new SimpleDateFormat("dd-MM-yyyy HH:mm:ss");
         Date date = new Date();
         System.out.println("Finished downloading!");
         System.out.println("\n--- " + dateFormat.format(date) + " ---");
+    }
+    
+    /**
+     * Connect to the database and set up the table for using.
+     */
+    private static void setUpDatabase() {
+        try {
+            Class.forName("org.h2.Driver");
+        } catch (ClassNotFoundException ex) {
+            System.out.println(ex.getMessage());
+            System.out.println("Class not fucking found! Aborting!");
+            System.exit(-1);
+        }
+        
+        try {
+            dbConn = DriverManager.getConnection(DATABASE_PATH);
+        } catch (SQLException ex) {
+            String errMessage = "Cannot connect to database!";
+            RuntimeException rtex = new RuntimeException(errMessage, ex);
+            printErrorMessage(rtex);
+        }
+        
+        // Create the table if not exists
+        String createTableQuery = "CREATE TABLE IF NOT EXISTS "
+                + TABLE_NAME + " ("
+                + "ID INT NOT NULL AUTO_INCREMENT,"
+                + "PRIMARY KEY(ID),"
+                + "FileName VARCHAR(255),"
+                + "DownloadURL VARCHAR(2083),"
+                + "DownloadedSize BIGINT,"
+                + ");";
+        
+        try {
+            PreparedStatement stmt = dbConn.prepareStatement(createTableQuery);
+            stmt.executeUpdate();
+        } catch (SQLException ex) {
+            String errMessage = "Cannot create information table in the database!";
+            RuntimeException rtex = new RuntimeException(errMessage, ex);
+            printErrorMessage(rtex);
+        }
     }
 
     /**
@@ -296,58 +314,6 @@ public class Main {
     }
 
     /**
-     * Print the usage.
-     */
-    private static void printUsage() {
-        System.err.println("\nUsage: java -jar qtdownloader.jar [OPTIONS] URL");
-        System.err.println("\nOptions: ");
-
-        ArrayList<String> validOptions = new ArrayList<>(cmdLineOptions.keySet());
-        Collections.sort(validOptions);
-
-        validOptions.stream().forEach((String option) -> {
-            System.err.println(String.format("\t%-20s: %s", option,
-                    cmdLineOptions.get(option)));
-        });
-
-        System.err.println();
-    }
-
-    /**
-     * Print the appropriate error message for the given exception.
-     *
-     * @param ex The exception whose message is to be printed.
-     */
-    private static void printErrorMessage(Exception ex) {
-        /*
-         * Print the appropriate error message from the exception caught.
-         */
-        if (ex instanceof MalformedURLException) {
-            System.err.println("\nInvalid URL: " + ex.getMessage());
-        } else if (ex instanceof ConnectException) {
-            ConnectException connectException = (ConnectException) ex;
-            System.err.println("\nFailed to connect to the given URL: "
-                    + connectException.getMessage());
-            System.err.println("\nCheck your internet connection or URL again.");
-        } else if (ex instanceof IOException) {
-            System.err.println("\nFailed to open the output file: "
-                    + ex.getMessage());
-        } else if (ex instanceof InterruptedException) {
-            System.err.println("\nOne of the thread was interrupted: "
-                    + ex.getMessage());
-        } else if (ex instanceof RuntimeException) {
-            System.err.println(Arrays.toString(ex.getStackTrace()));
-            System.err.println(ex.getMessage());
-        }
-
-        /*
-         * Exit the program.
-         */
-        System.err.println("\nExiting!");
-        System.exit(1);
-    }
-
-    /**
      * Read the list of downloaded files and URLs.
      *
      * @return A hashmap containing the information of the downloaded files, with the URL as key and an object of type DownloadSession as value.
@@ -408,28 +374,27 @@ public class Main {
     }
 
     /**
-     * Check if the file being downloaded has been downloaded or not, or if the previous download attempt was interrupted.
+     * Check if the file being downloaded has been downloaded or not, 
+     * or if the previous download attempt was interrupted.
      *
      * TODO find a better way to check if the file was downloaded, since http://test.com/test.bin and http://test.com/test.bin?i=1 are just the same.
      *
      * @param downloadSessionList List of downloaded files and URLs.
      */
-    private static DownloadSession checkIfFileWasDownloaded(HashMap<String, DownloadSession> downloadSessionList,
-            String fileName, String url) {
-        DownloadSession downloadSession = new DownloadSession(fileName, url, -1);
-        downloadSession.alreadyDownloaded = false;
-        downloadSession.resumeDownload = false;
-
-        for (Map.Entry<String, DownloadSession> entry : downloadSessionList.entrySet()) {
-            String currentUrl = entry.getKey();
-
-            if (currentUrl.equals(mURL)) {
-                // If the given URL match one of the URLs in the downloaded files list.
-                downloadSession.alreadyDownloaded = true;
-
-                DownloadSession ds = entry.getValue();
-                long downloadedSize = ds.getDownloadedSize();
-
+    private static DownloadSession checkIfFileWasDownloaded(String fileName, String url) {
+        DownloadSession session = new DownloadSession(fileName, url, -1);
+        session.alreadyDownloaded = false;
+        session.resumeDownload = false;
+        
+        try {
+            String selectDownloadQuery = "SELECT * FROM " + TABLE_NAME
+                    + "WHERE DownloadURL = " + url + ";";
+            PreparedStatement stmt = dbConn.prepareStatement(selectDownloadQuery);
+            ResultSet result = stmt.executeQuery();
+            
+            if (result.next()) {
+                long downloadedSize = result.getLong("DownloadedSize");
+                
                 if (downloadedSize == -1) {
                     // Downloaded size equal -1 means that the last 
                     // download attempt failed.
@@ -446,11 +411,10 @@ public class Main {
                     }
 
                     if (answer == 'y' || answer == 'Y') {
-                        downloadSession.resumeDownload = true;
+                        session.resumeDownload = true;
                     }
-
-                    break;
                 } else {
+                    // If it's not -1, the last download attempt succeeded.
                     System.out.print("\nYou downloaded from this URL. "
                             + "Do you want to download again? (y/n) ");
 
@@ -462,39 +426,96 @@ public class Main {
                     }
 
                     if (answer == 'n' || answer == 'N') {
-                        downloadSession.cancelDownload = true;
+                        session.cancelDownload = true;
                     }
                 }
-
-                break;
             }
+        } catch (SQLException ex) {
+            // Cannot select the data from database
+            // So we consider this download session as being new
+            // TODO Log the error.
         }
 
-        return downloadSession;
+        return session;
     }
 
     /**
-     * Write the list of downloaded files and URLs to file.
-     *
-     * @param sessionList List of downloaded files and URLs.
-     * @throws IOException
+     * Write the information for the current download session to the database.
+     * 
+     * @param session The current download session
      */
-    private static void writeInfo(HashMap<String, DownloadSession> sessionList)
-            throws IOException {
-        try (FileWriter tmpFile = new FileWriter(DOWNLOADED_LIST_FILENAME, false);
-                BufferedWriter wr = new BufferedWriter(tmpFile)) {
-            for (Map.Entry<String, DownloadSession> entry : sessionList.entrySet()) {
-                DownloadSession session = entry.getValue();
-                String url = entry.getKey();
-                String fileName = session.getFileName();
+    private static void writeDownloadSessionInfoToDB(DownloadSession session) {
+        try {
+            if (session.alreadyDownloaded) {
+                // If the file has been downloaded before,
+                // update the downloaded size.
                 long downloadedSize = session.getDownloadedSize();
-
-                String line = fileName + "," + url + ",";
-                line += String.valueOf(downloadedSize) + "\n";
-
-                wr.write(line);
+                String url = session.getURL();
+                
+                String updateInfoQuery = "UPDATE " + TABLE_NAME
+                        + " SET DownloadedSize=" + downloadedSize
+                        + " WHERE DownloadURL=" + url + ";";
+                PreparedStatement stmt = dbConn.prepareStatement(updateInfoQuery);
+                stmt.executeUpdate();
             }
+        } catch (SQLException ex) {
+            // IF failed to write the info, the information will not be written.
+            // Next time the file is downloaded from the url, it will be treated
+            // as a new download.
+            // TODO Log the error.
         }
     }
+    
+    /**
+     * Print the usage.
+     */
+    private static void printUsage() {
+        System.err.println("\nUsage: java -jar qtdownloader.jar [OPTIONS] URL");
+        System.err.println("\nOptions: ");
 
+        ArrayList<String> validOptions = new ArrayList<>(cmdLineOptions.keySet());
+        Collections.sort(validOptions);
+
+        validOptions.stream().forEach((String option) -> {
+            System.err.println(String.format("\t%-20s: %s", option,
+                    cmdLineOptions.get(option)));
+        });
+
+        System.err.println();
+    }
+
+    /**
+     * Print the appropriate error message for the given exception.
+     *
+     * @param ex The exception whose message is to be printed.
+     */
+    private static void printErrorMessage(Exception ex) {
+        ex.printStackTrace();
+        /*
+         * Print the appropriate error message from the exception caught.
+         */
+        if (ex instanceof MalformedURLException) {
+            System.err.println("\nInvalid URL: " + ex.getMessage());
+        } else if (ex instanceof ConnectException) {
+            ConnectException connectException = (ConnectException) ex;
+            System.err.println("\nFailed to connect to the given URL: "
+                    + connectException.getMessage());
+            System.err.println("\nCheck your internet connection or URL again.");
+        } else if (ex instanceof IOException) {
+            System.err.println("\nFailed to open the output file: "
+                    + ex.getMessage());
+        } else if (ex instanceof InterruptedException) {
+            System.err.println("\nOne of the thread was interrupted: "
+                    + ex.getMessage());
+        } else if (ex instanceof RuntimeException) {
+            System.err.println(Arrays.toString(ex.getStackTrace()));
+            System.err.println(ex.getMessage());
+        }
+
+        /*
+         * Exit the program.
+         */
+        System.err.println("\nExiting!");
+        System.exit(1);
+    }
 }
