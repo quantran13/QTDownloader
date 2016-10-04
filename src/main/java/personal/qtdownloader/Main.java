@@ -6,18 +6,14 @@
  */
 package personal.qtdownloader;
 
-import java.io.BufferedReader;
-import java.io.BufferedWriter;
 import java.io.File;
-import java.io.FileNotFoundException;
-import java.io.FileReader;
-import java.io.FileWriter;
 import java.io.IOException;
 import java.net.ConnectException;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.nio.file.InvalidPathException;
+import java.sql.*;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -25,24 +21,28 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
-import java.util.Map;
 import java.util.Scanner;
 import java.util.Set;
 
 public class Main {
 
     public static String mURL;
+    public static HashMap<String, String> userOptions;
+    public static Connection dbConn;
 
     public static final String PROGRAM_DIR;
-    public static final String DOWNLOADED_LIST_FILENAME;
     public static final String PROGRAM_TEMP_DIR;
+    public static final String DATABASE_FILE;
+    public static final String DATABASE_PATH;
+    public static final String TABLE_NAME;
+    
     public static final HashMap<String, String> cmdLineOptions;
-    public static HashMap<String, String> userOptions;
 
     /**
      * Initialize static final fields.
      */
     static {
+        // Add command line options
         cmdLineOptions = new HashMap<>();
         cmdLineOptions.put("-o", "Output file's directory");
         cmdLineOptions.put("-f", "Output file name");
@@ -52,9 +52,8 @@ public class Main {
         cmdLineOptions.put("--username", "HTTP authorization username");
         cmdLineOptions.put("-p", "HTTP authorization password");
         cmdLineOptions.put("--password", "HTTP authorization password");
-//        cmdLineOptions.put("--proxy-username", "Username for proxy");
-//        cmdLineOptions.put("--proxy-password", "Password for proxy");
 
+        // Set up necessary directory paths
         String programDir = System.getenv("HOME") + "/.QTDownloader";
         String programTmpDir = programDir + "/tmp/";
 
@@ -83,21 +82,24 @@ public class Main {
 
         PROGRAM_DIR = programDir;
         PROGRAM_TEMP_DIR = programTmpDir;
-        DOWNLOADED_LIST_FILENAME = programDir + "/.filelist.csv";
+        
+        // Set up database path
+        DATABASE_FILE = "qtdb";
+        DATABASE_PATH = "jdbc:h2:" + programDir + "\\" + DATABASE_FILE;
+        TABLE_NAME = "sessions";
     }
 
     /**
      *
      * @param args Array of arguments.
-     * @throws java.lang.InterruptedException
      */
     public static void main(String[] args) {
+        // Parse the arguments
         if (args.length == 0) {
             printUsage();
             System.exit(0);
         }
 
-        // Read the arguments
         userOptions = new HashMap<>();
         try {
             userOptions = readArgumentOptions(args);
@@ -107,23 +109,14 @@ public class Main {
 
         mURL = args[args.length - 1]; // The url is the last argument.
         int partsCount = 8;           // Number of parts to divide to download.
-
-        // Get the list of downloaded files
-        HashMap<String, DownloadSession> downloadSessionList = null;
-        try {
-            downloadSessionList = getListOfDownloadedFiles();
-        } catch (IOException ex) {
-            printErrorMessage(ex);
-        }
-
+        
+        // Set up the database
+        setUpDatabase();
+        
         // Check if the file has been downloaded or not
         String fileName = new File(mURL).getName();
         DownloadSession currentDownloadSession;
-        currentDownloadSession = checkIfFileWasDownloaded(downloadSessionList, 
-                fileName, mURL);
-
-        // If the file was downloaded before.
-        boolean downloaded = currentDownloadSession.alreadyDownloaded;
+        currentDownloadSession = checkIfFileWasDownloaded(fileName, mURL);
 
         // If the last attempt to download the file was interrupted and
         // the user chose to resume downloading.
@@ -132,26 +125,6 @@ public class Main {
         // If the user chooses to cancel downloading, exit the program
         if (currentDownloadSession.cancelDownload) {
             return;
-        }
-
-        // If failed to read from the download list file
-        // create a new hashmap for the download sessions list
-        if (downloadSessionList == null) {
-            downloadSessionList = new HashMap<>();
-        }
-
-        if (downloaded) {
-            currentDownloadSession = downloadSessionList.get(mURL);
-            currentDownloadSession.setDownloadSize(-1);
-        } else {
-            currentDownloadSession = new DownloadSession(fileName, mURL, -1);
-            downloadSessionList.put(mURL, currentDownloadSession);
-        }
-
-        try {
-            writeInfo(downloadSessionList);
-        } catch (IOException ex) {
-            printErrorMessage(ex);
         }
         
         // Start new download with the given URL
@@ -169,10 +142,56 @@ public class Main {
 
         // Save the download to the downloaded file list
         currentDownloadSession.setDownloadSize(newDownload.getDownloadedSize());
+        writeDownloadSessionInfoToDB(currentDownloadSession);
+        
+        // Close the database
         try {
-            writeInfo(downloadSessionList);
-        } catch (IOException ex) {
-            printErrorMessage(ex);
+            if (dbConn != null)
+                dbConn.close();
+        } catch (SQLException ex) {
+            // Fuck it then.
+            // Jk, log the error. Still, fuck it.
+            // TODO Log the error
+        }
+    }
+    
+    /**
+     * Connect to the database and set up the table for using.
+     */
+    public static void setUpDatabase() {
+        try {
+	    Class.forName("org.h2.Driver");
+        } catch (ClassNotFoundException ex) {
+            // If the class cannot be found (which should never happen)
+            // The program cannot save the download information in the database
+            // TODO Log the error
+            
+            System.out.println("[WARNING] Cannot find h2 driver: org.h2.driver ");
+            return;
+        }
+        
+        try {
+            dbConn = DriverManager.getConnection(DATABASE_PATH, "", "");
+        } catch (SQLException ex) {
+            System.out.println("[WARNING] Cannot connect to the database");
+            return;
+        }
+        
+        // Create the table if not exists
+        String createTableQuery = "CREATE TABLE IF NOT EXISTS "
+                + TABLE_NAME + " ("
+                + "ID INT NOT NULL AUTO_INCREMENT,"
+                + "PRIMARY KEY(ID),"
+                + "FileName VARCHAR(255),"
+                + "DownloadURL VARCHAR(2083),"
+                + "DownloadedSize BIGINT,"
+                + ");";
+        
+        try {
+            PreparedStatement stmt = dbConn.prepareStatement(createTableQuery);
+            stmt.executeUpdate();
+        } catch (SQLException ex) {
+            System.out.println("[WARNING] Cannot create information table in the database");
         }
     }
 
@@ -288,6 +307,122 @@ public class Main {
     }
 
     /**
+     * Check if the file being downloaded has been downloaded or not, 
+     * or if the previous download attempt was interrupted.
+     *
+     * TODO find a better way to check if the file was downloaded, since http://test.com/test.bin and http://test.com/test.bin?i=1 are just the same.
+     *
+     * @param downloadSessionList List of downloaded files and URLs.
+     */
+    private static DownloadSession checkIfFileWasDownloaded(String fileName, String url) {
+        DownloadSession session = new DownloadSession(fileName, url, -1);
+        session.alreadyDownloaded = false;
+        session.resumeDownload = false;
+        
+        // If the database connection is null then assume that the download is new
+        if (dbConn == null)
+            return session;
+        
+        try {
+            String selectDownloadQuery = "SELECT * FROM " + TABLE_NAME
+                    + " WHERE DownloadURL='" + url + "';";
+            PreparedStatement stmt = dbConn.prepareStatement(selectDownloadQuery);
+            ResultSet result = stmt.executeQuery();
+            
+            if (result.next()) {
+                long downloadedSize = result.getLong("DownloadedSize");
+                session.alreadyDownloaded = true;
+                
+                if (downloadedSize == -1) {
+                    // Downloaded size equal -1 means that the last 
+                    // download attempt failed.
+                    System.out.print("\nYour previous attempt to download"
+                            + " from this URL was interrupted. ");
+                    System.out.print("Do you want to resume downloading? "
+                            + "(y/n) ");
+
+                    char answer = 0;
+                    Scanner reader = new Scanner(System.in);
+                    while (answer != 'y' && answer != 'Y'
+                            && answer != 'n' && answer != 'N') {
+                        answer = reader.next().charAt(0);
+                    }
+
+                    if (answer == 'y' || answer == 'Y') {
+                        session.resumeDownload = true;
+                    }
+                } else {
+                    // If it's not -1, the last download attempt succeeded.
+                    System.out.print("\nYou downloaded from this URL. "
+                            + "Do you want to download again? (y/n) ");
+
+                    char answer = 0;
+                    Scanner reader = new Scanner(System.in);
+                    while (answer != 'y' && answer != 'Y'
+                            && answer != 'n' && answer != 'N') {
+                        answer = reader.next().charAt(0);
+                    }
+
+                    if (answer == 'n' || answer == 'N') {
+                        session.cancelDownload = true;
+                    }
+                }
+            }
+        } catch (SQLException ex) {
+            // Cannot select the data from database
+            // So we consider this download session as being new
+            // TODO Log the error.
+        }
+
+        return session;
+    }
+
+    /**
+     * Write the information for the current download session to the database.
+     * 
+     * @param session The current download session
+     */
+    private static void writeDownloadSessionInfoToDB(DownloadSession session) {
+        // If the database connection is null then don't write information to
+        // the database
+        
+        if (dbConn == null)
+            return;
+        
+        // Get the download information
+        long downloadedSize = session.getDownloadedSize();
+        String url = session.getURL();
+        String fileName = session.getFileName();
+        
+        try {
+            if (session.alreadyDownloaded) {
+                // If the file has been downloaded before,
+                // update the downloaded size.
+                String updateInfoQuery = "UPDATE " + TABLE_NAME
+                        + " SET DownloadedSize=" + downloadedSize
+                        + " WHERE DownloadURL=" + url + ";";
+                PreparedStatement stmt = dbConn.prepareStatement(updateInfoQuery);
+                stmt.executeUpdate();
+            } else {
+                // If the file hasn't been downloaded before
+                // insert a new entry into the table
+                String insertInfoQuery = "INSERT INTO " + TABLE_NAME
+                        + " (DownloadURL, DownloadedSize, FileName) "
+                        + " VALUES ('" + url + "', "
+                        + downloadedSize + ", '"
+                        + fileName + "');";
+                PreparedStatement stmt = dbConn.prepareStatement(insertInfoQuery);
+                stmt.executeUpdate();
+            }
+        } catch (SQLException ex) {
+            // IF failed to write the info, the information will not be written.
+            // Next time the file is downloaded from the url, it will be treated
+            // as a new download.
+            // TODO Log the error.
+        }
+    }
+    
+    /**
      * Print the usage.
      */
     private static void printUsage() {
@@ -338,155 +473,4 @@ public class Main {
         System.err.println("\nExiting!");
         System.exit(1);
     }
-
-    /**
-     * Read the list of downloaded files and URLs.
-     *
-     * @return A hashmap containing the information of the downloaded files, with the URL as key and an object of type DownloadSession as value.
-     *
-     * @throws IOException If failed to open the downloaded file list.
-     */
-    private static HashMap<String, DownloadSession> getListOfDownloadedFiles()
-            throws IOException {
-        // The download files list is store in a hashmap, with the url being the key.
-        HashMap<String, DownloadSession> downloadedList = new HashMap<>();
-
-        try (FileReader downloadedFileList = new FileReader(DOWNLOADED_LIST_FILENAME);
-                BufferedReader br = new BufferedReader(downloadedFileList)) {
-            String line;
-
-            try {
-                while ((line = br.readLine()) != null) {
-                    String[] wordList = line.split(",");
-
-                    if (wordList.length == 3) {
-                        // If the entry has 3 parts, the first is the download url,
-                        // the second is the file name, and the third is the 
-                        // file size. Also, this would mean that the download 
-                        // was completed.
-                        String fileName = wordList[0];
-                        String downloadUrl = wordList[1];
-                        long downloadedSize = Long.parseLong(wordList[2]);
-
-                        DownloadSession ds = new DownloadSession(fileName,
-                                downloadUrl, downloadedSize);
-
-                        downloadedList.put(downloadUrl, ds);
-                    } else if (wordList.length == 2) {
-                        // If the entry has 2 parts, the first is the download url,
-                        // the second is the file name.
-                        // Also, this would mean that the download was incomplete.
-                        String fileName = wordList[0];
-                        String downloadUrl = wordList[1];
-                        long downloadedSize = -1;
-
-                        DownloadSession ds = new DownloadSession(fileName,
-                                downloadUrl, downloadedSize);
-
-                        downloadedList.put(downloadUrl, ds);
-                    }
-                }
-            } catch (IOException ex) {
-                // If there's an error reading the file list then 
-                // just ignore the exception, and assume the file hasn't
-                // been downloaded before
-            }
-        } catch (FileNotFoundException ex) {
-            // Again, if the file does not exist then ignore the exception.
-            // Assume the file being downloaded hasn't been downloaded before.
-        }
-
-        return downloadedList;
-    }
-
-    /**
-     * Check if the file being downloaded has been downloaded or not, or if the previous download attempt was interrupted.
-     *
-     * TODO find a better way to check if the file was downloaded, since http://test.com/test.bin and http://test.com/test.bin?i=1 are just the same.
-     *
-     * @param downloadSessionList List of downloaded files and URLs.
-     */
-    private static DownloadSession checkIfFileWasDownloaded(HashMap<String, DownloadSession> downloadSessionList,
-            String fileName, String url) {
-        DownloadSession downloadSession = new DownloadSession(fileName, url, -1);
-        downloadSession.alreadyDownloaded = false;
-        downloadSession.resumeDownload = false;
-
-        for (Map.Entry<String, DownloadSession> entry : downloadSessionList.entrySet()) {
-            String currentUrl = entry.getKey();
-
-            if (currentUrl.equals(mURL)) {
-                // If the given URL match one of the URLs in the downloaded files list.
-                downloadSession.alreadyDownloaded = true;
-
-                DownloadSession ds = entry.getValue();
-                long downloadedSize = ds.getDownloadedSize();
-
-                if (downloadedSize == -1) {
-                    // Downloaded size equal -1 means that the last 
-                    // download attempt failed.
-                    System.out.print("\nYour previous attempt to download"
-                            + " from this URL was interrupted. ");
-                    System.out.print("Do you want to resume downloading? "
-                            + "(y/n) ");
-
-                    char answer = 0;
-                    Scanner reader = new Scanner(System.in);
-                    while (answer != 'y' && answer != 'Y'
-                            && answer != 'n' && answer != 'N') {
-                        answer = reader.next().charAt(0);
-                    }
-
-                    if (answer == 'y' || answer == 'Y') {
-                        downloadSession.resumeDownload = true;
-                    }
-
-                    break;
-                } else {
-                    System.out.print("\nYou downloaded from this URL. "
-                            + "Do you want to download again? (y/n) ");
-
-                    char answer = 0;
-                    Scanner reader = new Scanner(System.in);
-                    while (answer != 'y' && answer != 'Y'
-                            && answer != 'n' && answer != 'N') {
-                        answer = reader.next().charAt(0);
-                    }
-
-                    if (answer == 'n' || answer == 'N') {
-                        downloadSession.cancelDownload = true;
-                    }
-                }
-
-                break;
-            }
-        }
-
-        return downloadSession;
-    }
-
-    /**
-     * Write the list of downloaded files and URLs to file.
-     *
-     * @param sessionList List of downloaded files and URLs.
-     * @throws IOException
-     */
-    private static void writeInfo(HashMap<String, DownloadSession> sessionList)
-            throws IOException {
-        try (FileWriter tmpFile = new FileWriter(DOWNLOADED_LIST_FILENAME, false);
-                BufferedWriter wr = new BufferedWriter(tmpFile)) {
-            for (Map.Entry<String, DownloadSession> entry : sessionList.entrySet()) {
-                DownloadSession session = entry.getValue();
-                String url = entry.getKey();
-                String fileName = session.getFileName();
-                long downloadedSize = session.getDownloadedSize();
-
-                String line = fileName + "," + url + ",";
-                line += String.valueOf(downloadedSize) + "\n";
-
-                wr.write(line);
-            }
-        }
-    }
-
 }

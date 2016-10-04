@@ -428,10 +428,10 @@ public class Download implements Runnable {
         for (Future futureTask : futurePool) {
             try {
                 futureTask.get();
-            }catch (ExecutionException ex) {
+            } catch (ExecutionException ex) {
                 Throwable exception = ex.getCause();
                 printErrorMessage((Exception) exception);
-            }catch (InterruptedException ex) {
+            } catch (InterruptedException ex) {
                 printErrorMessage(ex);
             }
         }
