@@ -154,9 +154,12 @@ public class Main {
         
         // Close the database
         try {
-            dbConn.close();
+            if (dbConn != null)
+                dbConn.close();
         } catch (SQLException ex) {
-            // Fuck it then
+            // Fuck it then.
+            // Jk, log the error. Still, fuck it.
+            // TODO Log the error
         }
     }
     
