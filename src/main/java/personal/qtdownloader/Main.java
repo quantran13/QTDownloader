@@ -14,12 +14,9 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import java.nio.file.InvalidPathException;
 import java.sql.*;
-import java.text.DateFormat;
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.Date;
 import java.util.HashMap;
 import java.util.Scanner;
 import java.util.Set;
@@ -180,12 +177,12 @@ public class Main {
         // Create the table if not exists
         String createTableQuery = "CREATE TABLE IF NOT EXISTS "
                 + TABLE_NAME + " ("
-                + "ID INT NOT NULL AUTO_INCREMENT,"
+                + "id INT NOT NULL AUTO_INCREMENT,"
                 + "PRIMARY KEY(ID),"
-                + "FileName VARCHAR(255),"
-                + "DownloadURL VARCHAR(2083),"
-                + "DownloadedSize BIGINT,"
-                + ");";
+                + "file_name VARCHAR(255),"
+                + "url VARCHAR(2083),"
+                + "downloaded_size BIGINT,"
+                + "downloaded_date TIMESTAMP);";
         
         try {
             PreparedStatement stmt = dbConn.prepareStatement(createTableQuery);
@@ -325,12 +322,12 @@ public class Main {
         
         try {
             String selectDownloadQuery = "SELECT * FROM " + TABLE_NAME
-                    + " WHERE DownloadURL='" + url + "';";
+                    + " WHERE url='" + url + "';";
             PreparedStatement stmt = dbConn.prepareStatement(selectDownloadQuery);
             ResultSet result = stmt.executeQuery();
             
             if (result.next()) {
-                long downloadedSize = result.getLong("DownloadedSize");
+                long downloadedSize = result.getLong("downloaded_size");
                 session.alreadyDownloaded = true;
                 
                 if (downloadedSize == -1) {
@@ -385,7 +382,6 @@ public class Main {
     private static void writeDownloadSessionInfoToDB(DownloadSession session) {
         // If the database connection is null then don't write information to
         // the database
-        
         if (dbConn == null)
             return;
         
@@ -399,18 +395,20 @@ public class Main {
                 // If the file has been downloaded before,
                 // update the downloaded size.
                 String updateInfoQuery = "UPDATE " + TABLE_NAME
-                        + " SET DownloadedSize=" + downloadedSize
-                        + " WHERE DownloadURL=" + url + ";";
+                        + " SET downloaded_size=" + downloadedSize
+                        + ",downloaded_date=NOW()"
+                        + " WHERE url='" + url + "';";
                 PreparedStatement stmt = dbConn.prepareStatement(updateInfoQuery);
                 stmt.executeUpdate();
             } else {
                 // If the file hasn't been downloaded before
                 // insert a new entry into the table
-                String insertInfoQuery = "INSERT INTO " + TABLE_NAME
-                        + " (DownloadURL, DownloadedSize, FileName) "
+                String insertInfoQuery = "INSERT INTO " + TABLE_NAME + " "
+                        + "(url, downloaded_size, file_name, downloaded_date)"
                         + " VALUES ('" + url + "', "
                         + downloadedSize + ", '"
-                        + fileName + "');";
+                        + fileName + "', "
+                        + "NOW());";
                 PreparedStatement stmt = dbConn.prepareStatement(insertInfoQuery);
                 stmt.executeUpdate();
             }
